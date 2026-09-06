@@ -98,3 +98,99 @@ Pipeline tiếp nhận dữ liệu đầu vào `retailhive_10k.csv`, thực hi�
    - `covid_shock`: Ngày nằm trong khoảng `2020-03-01 → 2020-06-30`.
    - `covid_adaptation`: Ngày nằm trong khoảng `2020-07-01 → 2021-12-31`.
    - `post_covid`: Ngày `> 2021-12-31`.
+  
+### Phần 7: Gom Nhóm Thời Gian Theo Tuần (`aggregate_weekly`)
+
+Dữ liệu thô **12,000 dòng giao dịch** được nén thành 2 bảng tổng hợp:
+
+- **`weekly_total`:** Gom theo `week_start`.
+  - Mỗi tuần là **1 dòng duy nhất** đại diện cho toàn hệ thống.
+  - Tính:
+    - `sum(revenue)`
+    - `sum(quantity)`
+    - `nunique(transaction_id)`
+
+- **`weekly_channel`:** Gom theo `[week_start, channel]`.
+  - Mỗi tuần có **3 dòng** đại diện cho 3 kênh bán hàng riêng biệt:
+    - `Mobile`
+    - `Online`
+    - `Store`
+
+- **Cờ COVID ở cấp độ tuần:**
+  - Nếu tuần có **bất kỳ ngày nào** dính vào khoảng dịch, cả tuần đó được tính:
+    - `is_covid_period = True`
+
+### Phần 8: Điền Tuần Khuyết & Chia Tập Dữ Liệu Chống Rò Rỉ
+
+#### Chính sách điền tuần khuyết (Reindex Missing Weeks)
+
+- Tạo trục thời gian chuẩn 7 ngày/tuần bằng:
+  - `pd.date_range(freq="7D")`
+- Nếu có tuần bị thiếu trong thực tế, chèn tuần đó vào với:
+  - `revenue = NaN`
+  - `transaction_count = 0`
+  - `week_has_transactions = False`
+- Mục đích: **Tránh làm đứt đoạn chuỗi thời gian.**
+
+#### Chiến lược chia tập kiểm thử 2 vòng (Two-Round Validation Strategy)
+
+- **Vòng 1 (Val 1):**
+  - Train: `2019–2022` → **209 tuần**
+  - Validation: `2023` → **52 tuần**
+
+- **Vòng 2 (Val 2):**
+  - Train: `2019–2023` → **261 tuần**
+  - Validation: `2024` → **53 tuần**
+
+- **Test Set:**
+  - Giữ riêng toàn bộ năm `2025` → **52 tuần**
+  - Dùng để đánh giá độc lập cuối cùng.
+
+### Phần 9: Thẩm Định Bán Thành Phẩm (`validate_outputs`)
+
+Thực hiện **4 chốt kiểm tra chất lượng (KCS)** trước khi ghi đĩa:
+
+1. **Bảo toàn doanh thu (Revenue Conservation):**
+   - `Absolute Difference` giữa tổng doanh thu giao dịch thô và tổng doanh thu sau gom nhóm phải:
+     - `≤ 10^-6`
+   - Thực tế:
+     - `= 0.0`
+
+2. **Trục thời gian (Chronology):**
+   - Bảng tuần phải đảm bảo:
+     - Tăng dần liên tục (`is_monotonic_increasing`)
+     - Không chứa tuần bị trùng lặp (`duplicated`)
+
+3. **Đủ danh mục (Categories):**
+   - Bảng theo kênh phải chứa đầy đủ 3 kênh:
+     - `Mobile`
+     - `Online`
+     - `Store`
+
+4. **Tính toàn vẹn các tập Splits:**
+   - Đảm bảo từng tập con trong **5 tập chia** cũng tuân thủ đúng chiều thời gian.
+
+### Phần 10: Xuất File Ra Ổ Đĩa & Đóng Gói Pipeline (`save_outputs` & `run_pipeline`)
+
+#### Định dạng file CSV xuất ra (`data/processed/`)
+
+- `cleaned_transactions.csv` → **12,000 dòng**
+- `weekly_total.csv` → **366 dòng**
+- `weekly_channel.csv` → **1,098 dòng**
+
+#### Các file Splits
+
+- `train_2019_2022.csv`
+- `validation_2023.csv`
+- `train_2019_2023.csv`
+- `validation_2024.csv`
+- `test_2025.csv`
+
+#### Báo cáo Metadata (`preprocessing_report.json`)
+
+Lưu toàn bộ siêu dữ liệu của quá trình tiền xử lý:
+
+- Cấu hình chia `split`
+- Quy định COVID
+- Báo cáo chất lượng đầu vào `quality_report`
+- Báo cáo thẩm định đầu ra `validation_report`

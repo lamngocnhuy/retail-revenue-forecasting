@@ -285,8 +285,8 @@ def aggregate_weekly(transactions: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataF
         missing_rows = pd.DataFrame(
             {
                 "week_start": missing_weeks,
-                "revenue": np.nan,
-                "quantity": np.nan,
+                "revenue": 0.0,
+                "quantity": 0.0,
                 "transaction_count": 0,
                 "first_transaction_date": pd.NaT,
                 "last_transaction_date": pd.NaT,
@@ -399,7 +399,7 @@ def save_outputs(
         "week_definition": "Monday-based week; week_start is the Monday date",
         "target": "weekly revenue is sum of transaction revenue",
         "missing_week_policy": (
-            "Missing weeks are retained with NaN revenue and week_has_transactions=false; "
+            "Missing weeks are retained with 0.0 revenue, 0.0 quantity, and week_has_transactions=false; "
             "no missing weeks were observed in the current source data."
         ),
         "split_policy": asdict(SplitConfig()),
