@@ -1,0 +1,17 @@
+SARIMA Residual Diagnostics — STORE
+Selected model: (1, 0, 1) (0, 0, 0, 52)
+n_residuals: 209
+Confidence band (±1.96/√n): ±0.1356
+
+mean_residual      : 11.3890
+Ljung-Box p@lag10  : 0.0241
+Ljung-Box p@lag20  : 0.1364
+Ljung-Box p@lag52  : 0.4681
+max_ACF_spike(1-30): 0.2167
+ACF_at_lag52       : -0.0233
+
+Notes:
+INFO: Ljung-Box lag10 p=0.024 < 0.05 -> residual còn autocorrelation -> XGBoost có thể học thêm
+
+Reminder: Ljung-Box failure is diagnostic info, NOT model rejection criterion.
+Residual autocorrelation → signal for XGBoost Hybrid to investigate.
