@@ -9,6 +9,7 @@ Pipeline:
 6. Residual diagnostics: Ljung-Box, ACF stats (diagnostic, không loại model)
 7. Validation 2024: stability check
 8. Save tất cả artifacts vào reports/sarima/
+9. Final refit 2019–2024 + forecast test_2025
 
 Usage:
     python src/train_sarima.py --series total
