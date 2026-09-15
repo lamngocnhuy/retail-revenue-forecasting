@@ -3,15 +3,15 @@ Selected model: (1, 0, 1) (0, 0, 0, 52)
 n_residuals: 209
 Confidence band (±1.96/√n): ±0.1356
 
-mean_residual      : 32.8403
-Ljung-Box p@lag10  : 0.0013
-Ljung-Box p@lag20  : 0.0398
-Ljung-Box p@lag52  : 0.1455
-max_ACF_spike(1-30): 0.1935
-ACF_at_lag52       : 0.0302
+mean_residual      : 19.0949
+Ljung-Box p@lag10  : 0.0148
+Ljung-Box p@lag20  : 0.1607
+Ljung-Box p@lag52  : 0.2407
+max_ACF_spike(1-30): 0.1860
+ACF_at_lag52       : 0.047
 
 Notes:
-INFO: Ljung-Box lag10 p=0.001 < 0.05 -> residual còn autocorrelation -> XGBoost có thể học thêm
+INFO: Ljung-Box lag10 p=0.015 < 0.05 -> residual con autocorrelation -> XGBoost co the hoc them
 
 Reminder: Ljung-Box failure is diagnostic info, NOT model rejection criterion.
 Residual autocorrelation → signal for XGBoost Hybrid to investigate.

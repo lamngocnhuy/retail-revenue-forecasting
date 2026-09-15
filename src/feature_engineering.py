@@ -152,21 +152,43 @@ def add_covid_flags(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def add_outlier_flag(df: pd.DataFrame, series_name: str) -> pd.DataFrame:
-    """Group 5: Outlier flag dựa trên p90 (top 10%) của từng series.
-
-    Dùng percentile thay vì IQR cứng vì:
-    - IQR upper bound hardcode từ EDA tổng không phù hợp từng kênh riêng lẻ
-    - p90 tự động thích nghi với phân phối thực tế của mỗi series
-    - Đảm bảo luôn có ~10% positive samples (37/366 tuần) — đủ để XGBoost học
-
-    Flag được tính từ revenue THỰC tại t — không có leakage vì đây là
-    thông tin hiện tại (current), không phải future.
+    """Group 5: Outlier flag dựa trên p90 (top 10%) với Dynamic Expanding Window.
+    
+    Fix p90 leakage: Tính p90 động theo từng fold.
+    - Fold train (<=2022): tính trên toàn bộ 2019-2022
+    - Val 2023: tính trên 2019-2022
+    - Val 2024: tính trên 2019-2023
+    - Test 2025: tính trên 2019-2024
+    Fix target leakage: Sử dụng lag_revenue_1 thay vì revenue hiện tại.
     """
+    import numpy as np
     result = df.copy()
-    p90 = float(result["revenue"].quantile(0.90))
-    result["is_high_revenue_week"] = (result["revenue"] > p90).astype(int)
+    
+    result["p90_threshold"] = np.nan
+    
+    # 1. Train fold (<=2022)
+    train_mask = result["split_year"] <= 2022
+    p90_train = float(result[train_mask]["revenue"].quantile(0.90))
+    result.loc[train_mask, "p90_threshold"] = p90_train
+    
+    # 2. Expanding window cho 2023, 2024, 2025
+    for year in [2023, 2024, 2025]:
+        mask = result["split_year"] == year
+        if mask.sum() > 0:
+            hist_mask = result["split_year"] < year
+            p90_hist = float(result[hist_mask]["revenue"].quantile(0.90))
+            result.loc[mask, "p90_threshold"] = p90_hist
+            if series_name == "Total":
+                print(f"  [Dynamic p90] {year}: {p90_hist:.2f} (from <{year})")
+    
+    # 3. Tạo feature từ dữ liệu quá khứ (t-1)
+    result["is_high_revenue_week"] = (result["lag_revenue_1"] > result["p90_threshold"]).astype(int)
+    
     n_flagged = result["is_high_revenue_week"].sum()
-    print(f"  Outlier flag (p90={p90:.2f}): {n_flagged} weeks flagged as high ({n_flagged/len(result)*100:.1f}%)")
+    print(f"  Outlier flag: {n_flagged} weeks flagged (lag-based, fold-specific p90)")
+    
+    # Cleanup cột tạm
+    result = result.drop(columns=["p90_threshold"])
     return result
 
 

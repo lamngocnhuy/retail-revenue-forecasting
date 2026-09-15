@@ -52,10 +52,12 @@ Một trong những lỗi nguy hiểm nhất trong Machine Learning chuỗi th�
 *   **Mục đích:** Giải thích các cú rớt đáy hoặc tăng vọt bất thường.
 *   **Tại sao cần thiết?** Nếu không có biến này, XGBoost sẽ bối rối khi thấy doanh thu tự nhiên rớt thảm hại ở năm 2020 và có thể dự báo sai lệch cho tương lai. Nhờ có cờ này, nó sẽ phân lập được hiệu ứng dịch bệnh ra khỏi quy luật mua bán thông thường.
 
-### Group 5: Outlier Flag (Phát hiện đột biến)
+### Group 5: Outlier Flag (Phát hiện đột biến - Causal & Dynamic)
 *   **Các cột:** `is_high_revenue_week` (1 cột).
-*   **Mục đích & Cải tiến:** Ban đầu, ta dùng ngưỡng IQR cố định, kết quả là chỉ có 2/366 tuần được đánh dấu (quá ít, XGBoost không thể học). Chúng ta đã cải tiến bằng cách dùng **Percentile 90 (p90)** tính riêng cho từng kênh.
-*   **Tại sao cần thiết?** Đảm bảo luôn có ~10% (37 tuần) doanh thu cao nhất được đánh dấu. Đây là tín hiệu "nhắc tuồng" cực tốt để XGBoost tập trung lực lượng học cách dự báo các tuần đỉnh điểm (peak weeks - như Black Friday, Lễ, Tết).
+*   **Mục đích & Cải tiến:** Ban đầu, ta dùng ngưỡng IQR cố định, kết quả là chỉ có 2/366 tuần được đánh dấu. Chúng ta đã nâng cấp thuật toán theo 2 lớp bảo vệ chống Leakage:
+    *   **Causal Forecasting (Target Leakage Fix):** Sử dụng `lag_revenue_1 > p90` thay vì revenue hiện tại. Điều này biến feature thành tín hiệu dự báo: *"Tuần trước doanh thu vọt đỉnh, tuần này sẽ ra sao?"*.
+    *   **Dynamic Expanding Window (p90 Leakage Fix):** Ngưỡng p90 không cố định mà "nở" ra theo từng năm (Expanding). `p90_2024` chỉ được tính từ dữ liệu trước 2024, đảm bảo tuyệt đối không rò rỉ dữ liệu tương lai.
+*   **Tại sao cần thiết?** Đảm bảo luôn có ~10% doanh thu cao nhất được đánh dấu một cách hợp lệ. Đây là tín hiệu "nhắc tuồng" cực tốt để XGBoost tập trung lực lượng học cách dự báo đà tăng trưởng (momentum) hoặc hụt hơi (fatigue) sau các tuần peak weeks.
 
 ### Group 6: Year-over-Year (YoY) & Month-over-Month (MoM) Ratios
 *   **Các cột:** `lag_52_ratio` và `lag_4_ratio` (2 cột).

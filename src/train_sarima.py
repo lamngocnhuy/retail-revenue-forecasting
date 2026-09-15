@@ -52,8 +52,8 @@ except ImportError as e:
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 DATA_DIR = Path("data/processed")
-REPORT_DIR = Path("reports/sarima")
-REPORT_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR = Path("outputs/sarima")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Cấu hình mùa vụ ──────────────────────────────────────────────────────────
 SEASONAL_PERIOD = 52  # Weekly, annual seasonality
@@ -345,11 +345,11 @@ def run_residual_diagnostics(
     # ── Interpretation notes ──────────────────────────────────────────────────
     notes = []
     if abs(mean_resid) > 0.05 * abs(fitted_model.fittedvalues.mean()):
-        notes.append("WARN: residual mean không gần 0 -> possible bias")
+        notes.append("WARN: residual mean khong gan 0 -> possible bias")
     if lb_p10 < 0.05:
-        notes.append(f"INFO: Ljung-Box lag10 p={lb_p10:.3f} < 0.05 -> residual còn autocorrelation -> XGBoost có thể học thêm")
+        notes.append(f"INFO: Ljung-Box lag10 p={lb_p10:.3f} < 0.05 -> residual con autocorrelation -> XGBoost co the hoc them")
     else:
-        notes.append(f"INFO: Ljung-Box lag10 p={lb_p10:.3f} >= 0.05 -> không phát hiện autocorrelation rõ")
+        notes.append(f"INFO: Ljung-Box lag10 p={lb_p10:.3f} >= 0.05 -> khong phat hien autocorrelation ro")
     if acf_at_lag52 is not None and abs(acf_at_lag52) > conf_band:  # Fix: is not None
         notes.append(f"WARN: ACF tai lag 52 = {acf_at_lag52:.3f} (vuot +/-{conf_band:.3f}) -> con seasonal dependency")
 
@@ -359,16 +359,18 @@ def run_residual_diagnostics(
 
 # ── 6. Validation ─────────────────────────────────────────────────────────────
 
-def forecast_from_fitted(
+def forecast_1step_ahead(
     fitted_model: Any,
-    n_steps: int,
-    index: pd.DatetimeIndex,
+    y_train: pd.Series,
+    y_future: pd.Series,
 ) -> pd.Series:
-    """Lấy forecast từ fitted SARIMA model."""
-    fc_result = fitted_model.get_forecast(steps=n_steps)
-    fc_mean   = fc_result.predicted_mean
-    fc_mean.index = index[:n_steps]
-    return fc_mean
+    """Lấy rolling 1-step ahead forecast từ fitted SARIMA model.
+    Không retune tham số, chỉ update state (Actual(t-1) -> Forecast(t)).
+    """
+    y_combined = pd.concat([y_train, y_future])
+    res_combined = fitted_model.apply(y_combined)
+    fc_1step = res_combined.fittedvalues.loc[y_future.index]
+    return fc_1step
 
 
 def run_validation_2024(
@@ -378,10 +380,15 @@ def run_validation_2024(
     best_seasonal_order: tuple,
     series_name: str,
 ) -> dict[str, Any]:
-    """Refit model thắng trên 2019–2023, forecast 2024. KHÔNG retune.
+    """
+    Refit model thắng trên 2019-2023, sau đó thực hiện
+    one-step-ahead rolling forecast cho toàn bộ 2024.
+    Không retune tham số SARIMA.
 
-    Mục đích: Stability check.
-    Nếu RMSE_2024 / RMSE_2023 > 1.5 → ghi cảnh báo.
+    Mục đích:
+    - kiểm tra stability/out-of-sample performance;
+    - giữ nguyên model selection từ 2023;
+    - đảm bảo protocol nhất quán với Hybrid XGBoost.
     """
     print(f"  [val2024] Refitting on 2019-2023 ({len(y_train_extended)} weeks)...", flush=True)
     fitted_ext, info = fit_one_candidate(y_train_extended, best_order, best_seasonal_order)
@@ -390,7 +397,7 @@ def run_validation_2024(
         print(f"  [val2024] Model failed to converge: {info['error_msg']}")
         return {"converged": False, "error_msg": info["error_msg"]}
 
-    fc_2024 = forecast_from_fitted(fitted_ext, len(y_val_2024), y_val_2024.index)
+    fc_2024 = forecast_1step_ahead(fitted_ext, y_train_extended, y_val_2024)
     if (fc_2024 < 0).any():
         fc_2024 = fc_2024.clip(lower=0)
     metrics_2024 = compute_metrics(y_val_2024, fc_2024)
@@ -402,7 +409,7 @@ def run_validation_2024(
         "sarima_forecast":  fc_2024.values,
         "residual":         (y_val_2024.values - fc_2024.values),
     })
-    out_path = REPORT_DIR / f"forecast_val2024_{series_name}.csv"
+    out_path = OUTPUT_DIR / f"forecast_val2024_{series_name}.csv"
     out_df.to_csv(out_path, index=False)
     print(f"  [val2024] RMSE={metrics_2024['rmse']:.2f} MAE={metrics_2024['mae']:.2f} sMAPE={metrics_2024['smape']:.2f}%")
     print(f"  [val2024] Saved: {out_path}")
@@ -430,7 +437,7 @@ def run_final_refit(
         print(f"  [final] Model failed to converge: {info['error_msg']}")
         return {"converged": False, "error_msg": info["error_msg"]}
 
-    fc_test = forecast_from_fitted(fitted_final, len(y_test_2025), y_test_2025.index)
+    fc_test = forecast_1step_ahead(fitted_final, y_final_train, y_test_2025)
     if (fc_test < 0).any():
         fc_test = fc_test.clip(lower=0)
     metrics_test = compute_metrics(y_test_2025, fc_test)
@@ -442,7 +449,7 @@ def run_final_refit(
         "sarima_forecast":  fc_test.values,
         "residual":         (y_test_2025.values - fc_test.values),
     })
-    out_path = REPORT_DIR / f"forecast_test2025_{series_name}.csv"
+    out_path = OUTPUT_DIR / f"forecast_test2025_{series_name}.csv"
     out_df.to_csv(out_path, index=False)
     print(f"  [final] RMSE_test={metrics_test['rmse']:.2f} MAE={metrics_test['mae']:.2f} sMAPE={metrics_test['smape']:.2f}%")
     print(f"  [final] Saved: {out_path}")
@@ -519,7 +526,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
     # ── Stage 3 & 4: Fit + Evaluate ───────────────────────────────────────────
     print("\n[Stage 3/4] Fitting candidates on train 2019-2022...")
     rows = []
-    fitted_objects: dict[str, Any] = {}  # Cache fitted objects để dùng lại ở Stage 6
+    fitted_objects: dict[tuple[tuple, tuple], Any] = {}  # Cache fitted objects để dùng lại ở Stage 6
     for i, cand in enumerate(candidates, 1):
         order          = cand["order"]
         seasonal_order = cand["seasonal_order"]
@@ -544,7 +551,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
         }
 
         if fitted is not None:
-            fc_2023 = forecast_from_fitted(fitted, len(y_val_2023), y_val_2023.index)
+            fc_2023 = forecast_1step_ahead(fitted, y_train, y_val_2023)
             # Clip âm trước khi tính metrics — revenue không thể âm,
             # clip là phần của pipeline (không chỉ visualisation),
             # đảm bảo metrics nhất quán với forecast lưu vào CSV.
@@ -556,7 +563,8 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
                 "rmse_2023":  metrics["rmse"],
                 "smape_2023": metrics["smape"],
             })
-            fitted_objects[str(order)] = fitted  # Cache để tái sử dụng
+            cache_key = (order, seasonal_order)
+            fitted_objects[cache_key] = fitted  # Cache để tái sử dụng
             print(f"RMSE={metrics['rmse']:.2f} MAE={metrics['mae']:.2f} sMAPE={metrics['smape']:.1f}%")
         else:
             print(f"FAILED: {info.get('error_msg', '')[:60]}")
@@ -567,9 +575,10 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
 
     # ── Stage 5: Model selection ───────────────────────────────────────────────
     print("\n[Stage 5] Selecting best model...")
+    import ast
     best_row = select_best_model(tuning_df)
-    best_order          = eval(best_row["order"])   # noqa: S307
-    best_seasonal_order = eval(best_row["seasonal_order"])  # noqa: S307
+    best_order          = ast.literal_eval(best_row["order"])
+    best_seasonal_order = ast.literal_eval(best_row["seasonal_order"])
     # Đánh dấu selected = True cho ĐÚNG model thắng
     tuning_df.loc[
         (tuning_df["order"] == best_row["order"]) & 
@@ -587,7 +596,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
     # ── Stage 6: Residual diagnostics ─────────────────────────────────────────
     # Dùng lại cached fitted object từ Stage 3/4 — tránh refit không cần thiết.
     print("\n[Stage 6] Residual diagnostics (diagnostic only, not selection criterion)...")
-    fitted_best = fitted_objects.get(best_row["order"])
+    fitted_best = fitted_objects.get((best_order, best_seasonal_order))
     if fitted_best is None:
         # Fallback: refit nếu cache miss (không nên xảy ra)
         print("  WARNING: fitted cache miss — refitting best model...")
@@ -607,7 +616,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
     # Tại đây generate lại forecast từ cùng fitted object để lưu CSV.
     # Không cần clip thêm vì fitted_best là cùng model đã cho fc_2023 nhất quán.
     print("\n[Stage 7] Saving val_2023 artifacts...")
-    fc_2023 = forecast_from_fitted(fitted_best, len(y_val_2023), y_val_2023.index)
+    fc_2023 = forecast_1step_ahead(fitted_best, y_train, y_val_2023)
     if (fc_2023 < 0).any():
         n_neg = int((fc_2023 < 0).sum())
         print(f"  WARN: {n_neg} negative forecast values — clipping to 0 (consistent with tuning metrics)")
@@ -619,12 +628,12 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
         "sarima_forecast": fc_2023.values,
         "residual":        (y_val_2023.values - fc_2023.values),
     })
-    fc_path = REPORT_DIR / f"forecast_val2023_{name}.csv"
+    fc_path = OUTPUT_DIR / f"forecast_val2023_{name}.csv"
     forecast_df.to_csv(fc_path, index=False)
     print(f"  Saved: {fc_path}")
 
     # Tuning results
-    tuning_path = REPORT_DIR / f"tuning_results_{name}.csv"
+    tuning_path = OUTPUT_DIR / f"tuning_results_{name}.csv"
     tuning_df.to_csv(tuning_path, index=False)
     print(f"  Saved: {tuning_path}")
 
@@ -648,7 +657,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
         "Reminder: Ljung-Box failure is diagnostic info, NOT model rejection criterion.",
         "Residual autocorrelation → signal for XGBoost Hybrid to investigate.",
     ]
-    diag_path = REPORT_DIR / f"residual_diagnostics_{name}.txt"
+    diag_path = OUTPUT_DIR / f"residual_diagnostics_{name}.txt"
     diag_path.write_text("\n".join(diag_lines), encoding="utf-8")
     print(f"  Saved: {diag_path}")
 
@@ -668,7 +677,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
     # ── Stage 9: Final refit 2019–2024 + forecast test_2025 ──────────────────────
     # Refit trên toàn bộ train+val (2019-2024 = 314 tuần), forecast test_2025.
     # Lưu ý: RMSE_test là SARIMA-only, chưa có XGBoost correction.
-    # Residual test_2025 trong file CSV sẽ được XGBoost task dùng.
+    # residual_test2025 chỉ được sử dụng để đánh giá Hybrid trên final test, không được sử dụng trong quá trình huấn luyện hoặc tuning XGBoost.
     print("\n[Stage 9] Final refit on 2019-2024 + forecast test_2025...")
     metrics_test = run_final_refit(
         y_final_train, y_test_2025, best_order, best_seasonal_order, name
@@ -728,7 +737,7 @@ def main() -> None:
     # ── Cross-series summary table ────────────────────────────────────────────
     if len(all_summaries) > 1:
         summary_df = pd.DataFrame(all_summaries)
-        summary_path = REPORT_DIR / "sarima_summary_all_series.csv"
+        summary_path = OUTPUT_DIR / "sarima_summary_all_series.csv"
         summary_df.to_csv(summary_path, index=False)
         print(f"\nCross-series summary saved: {summary_path}")
         print("\n" + summary_df[
