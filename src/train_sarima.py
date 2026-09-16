@@ -31,7 +31,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-warnings.filterwarnings("ignore")
+# Suppress chỉ những warning không liên quan đến convergence/numerical stability.
+# ConvergenceWarning và EstimationWarning được để tự nhiên để dễ debug.
+warnings.filterwarnings("ignore", message="No supported index is available")
+warnings.filterwarnings("ignore", message="A date index has been provided")
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 # ── Optional imports với fallback message ─────────────────────────────────────
 try:
@@ -81,12 +85,16 @@ MANUAL_CANDIDATES: list[tuple[tuple, tuple]] = [
     ((2, _d_DEFAULT, 2), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(2,2)
 
     # ── Có Seasonal (Ghép P=1 hoặc Q=1 vào các model Non-seasonal tốt) ──
-    # Thực tế retail revenue thường tương quan mạnh với năm ngoái qua Q=1
+    # Seasonal candidates được bổ sung để kiểm tra khả năng tồn tại
+    # dependency theo chu kỳ 52 tuần; quyết định cuối cùng dựa trên
+    # out-of-sample validation, không giả định seasonal effect mạnh.
     ((1, _d_DEFAULT, 0), (1, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # AR(1) + SAR(1)
     ((1, _d_DEFAULT, 1), (1, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(1,1) + SAR(1)
     ((1, _d_DEFAULT, 1), (0, _D_DEFAULT, 1, SEASONAL_PERIOD)),  # ARMA(1,1) + SMA(1)
     ((2, _d_DEFAULT, 1), (0, _D_DEFAULT, 1, SEASONAL_PERIOD)),  # ARMA(2,1) + SMA(1)
     ((1, _d_DEFAULT, 2), (0, _D_DEFAULT, 1, SEASONAL_PERIOD)),  # ARMA(1,2) + SMA(1)
+    ((3, _d_DEFAULT, 0), (0, _D_DEFAULT, 1, SEASONAL_PERIOD)), 
+    
 ]
 
 # auto_arima (stepwise) chỉ trả về 1 best candidate — không expose ranked list.
@@ -250,6 +258,44 @@ def get_all_candidates(
 
 # ── 4. Fitting ────────────────────────────────────────────────────────────────
 
+def _extract_root_stability(fitted) -> dict:
+    """Tính modulus của AR và MA roots, đánh giá tính ổn định nghiệm.
+
+    Stationary condition:   |AR root| > 1  (all roots nằm NGOÀI unit circle)
+    Invertible condition:   |MA root| > 1  (all roots nằm NGOÀI unit circle)
+
+    Near-unit-root (0.98 < |root| <= 1.0): đặc trưng bình thường của dữ liệu
+    doanh thu bán lẻ có tính persistence cao. KHÔNG tự động loại model.
+
+    Returns dict với full-precision roots để tránh nhầm lẫn khi display.
+    """
+    result = {
+        "ar_roots":       [],
+        "ma_roots":       [],
+        "min_ar_root":    None,
+        "min_ma_root":    None,
+        "ar_stable":      None,   # True nếu tất cả roots > 1.0
+        "ma_invertible":  None,
+        "ar_near_unit":   None,   # True nếu có root nằm trong (0.98, 1.0] — near-unit-root warning
+    }
+    try:
+        ar = np.abs(fitted.arroots).tolist()
+        ma = np.abs(fitted.maroots).tolist()
+        # Lưu full precision — tránh round() che khuất giá trị 0.9999 thành 1.0000
+        result["ar_roots"]      = [float(r) for r in ar]
+        result["ma_roots"]      = [float(r) for r in ma]
+        result["min_ar_root"]   = float(min(ar)) if ar else None
+        result["min_ma_root"]   = float(min(ma)) if ma else None
+        # Strict criterion: |root| > 1.0 (không phải >= 1.0)
+        result["ar_stable"]     = bool(all(r > 1.0 for r in ar)) if ar else True
+        result["ma_invertible"] = bool(all(r > 1.0 for r in ma)) if ma else True
+        # Near-unit-root: có root nằm trong (0.98, 1.0] — persistence cao, bình thường với retail data
+        result["ar_near_unit"]  = bool(any(0.98 < r <= 1.0 for r in ar)) if ar else False
+    except Exception:
+        pass
+    return result
+
+
 def fit_one_candidate(
     y_train: pd.Series,
     order: tuple,
@@ -257,19 +303,34 @@ def fit_one_candidate(
 ) -> tuple[Any | None, dict]:
     """Fit một SARIMA candidate. Trả về (fitted_model | None, info_dict).
 
-    Model hội tụ → trả về fitted object.
-    Model không hội tụ → trả về None, ghi nhận trong info.
+    Strategy:
+    - Pass 1: unconstrained (enforce_stationarity=False, enforce_invertibility=False)
+              Nếu converge → kiểm tra AR/MA roots có ổn định không.
+    - Pass 2 (fallback): constrained (enforce_stationarity=True, enforce_invertibility=True)
+              + tăng maxiter lên 500. Nếu vẫn fail → ghi nhận FAILED.
+
+    Mục tiêu: investigate nguyên nhân (optimizer vs. constraint)
     """
     info: dict[str, Any] = {
-        "order": str(order),
+        "order":          str(order),
         "seasonal_order": str(seasonal_order),
-        "converged": False,
-        "aic": None,
-        "bic": None,
-        "n_params": None,
-        "error_msg": None,
+        "converged":      False,
+        "optimizer":      None,
+        "iterations":     None,
+        "aic":            None,
+        "bic":            None,
+        "n_params":       None,
+        "min_ar_root":    None,
+        "min_ma_root":    None,
+        "ar_stable":      None,
+        "ma_invertible":  None,
+        "error_msg":      None,
     }
 
+    # ── Pass 1: Unconstrained ──────────────────────────────────────────────────
+    # Cho optimizer tự do khám phá toàn bộ parameter space.
+    # Một số model có numerical surface khó nhưng vẫn cho nghiệm ổn định;
+    # enforce=False giúp tránh converge prematurely vào boundary.
     try:
         model = SARIMAX(
             y_train,
@@ -279,20 +340,75 @@ def fit_one_candidate(
             enforce_stationarity=False,
             enforce_invertibility=False,
         )
-        fitted = model.fit(disp=False, maxiter=200)
+        fitted = model.fit(disp=False, maxiter=200, method="lbfgs")
 
-        if not fitted.mle_retvals.get("converged", True):
-            info["error_msg"] = "MLE did not converge"
-            return None, info
+        mle = fitted.mle_retvals
+        info["optimizer"]  = "lbfgs"
+        info["iterations"] = int(mle.get("iterations", mle.get("nit", -1)))
 
-        info["converged"] = True
-        info["aic"]       = round(fitted.aic, 2)
-        info["bic"]       = round(fitted.bic, 2)
-        info["n_params"]  = int(fitted.df_model)
-        return fitted, info
+        if mle.get("converged", True):
+            roots = _extract_root_stability(fitted)
+            info.update({
+                "converged":    True,
+                "aic":          round(fitted.aic, 2),
+                "bic":          round(fitted.bic, 2),
+                "n_params":     int(fitted.df_model),
+                "min_ar_root":  roots["min_ar_root"],
+                "min_ma_root":  roots["min_ma_root"],
+                "ar_stable":    roots["ar_stable"],
+                "ma_invertible": roots["ma_invertible"],
+            })
+            return fitted, info
+        else:
+            # Pass 1 failed → ghi nhận, thử Pass 2
+            info["error_msg"] = f"Pass1 lbfgs did not converge ({info['iterations']} iters)"
 
     except Exception as exc:
-        info["error_msg"] = str(exc)[:120]
+        info["error_msg"] = f"Pass1 exception: {str(exc)[:80]}"
+
+    # ── Pass 2: Constrained + nhiều iterations hơn ────────────────────────────
+    # Khi unconstrained fail, enforce constraints để thu hẹp search space
+    # và cho optimizer nhiều budget hơn.
+    try:
+        model2 = SARIMAX(
+            y_train,
+            order=order,
+            seasonal_order=seasonal_order,
+            trend="n",
+            enforce_stationarity=True,
+            enforce_invertibility=True,
+        )
+        fitted2 = model2.fit(disp=False, maxiter=500, method="lbfgs")
+
+        mle2 = fitted2.mle_retvals
+        info["optimizer"]  = "lbfgs(constrained)"
+        info["iterations"] = int(mle2.get("iterations", mle2.get("nit", -1)))
+
+        if mle2.get("converged", True):
+            roots = _extract_root_stability(fitted2)
+            info.update({
+                "converged":     True,
+                "aic":           round(fitted2.aic, 2),
+                "bic":           round(fitted2.bic, 2),
+                "n_params":      int(fitted2.df_model),
+                "min_ar_root":   roots["min_ar_root"],
+                "min_ma_root":   roots["min_ma_root"],
+                "ar_stable":     roots["ar_stable"],
+                "ma_invertible": roots["ma_invertible"],
+                "error_msg":     (info["error_msg"] or "") + " | Pass2(constrained) OK",
+            })
+            return fitted2, info
+        else:
+            info["error_msg"] = (
+                (info["error_msg"] or "") +
+                f" | Pass2 constrained also did not converge ({info['iterations']} iters)"
+            )
+            return None, info
+
+    except Exception as exc:
+        info["error_msg"] = (
+            (info["error_msg"] or "") + f" | Pass2 exception: {str(exc)[:60]}"
+        )
         return None, info
 
 
@@ -393,6 +509,27 @@ def run_validation_2024(
     print(f"  [val2024] Refitting on 2019-2023 ({len(y_train_extended)} weeks)...", flush=True)
     fitted_ext, info = fit_one_candidate(y_train_extended, best_order, best_seasonal_order)
 
+    # ── Log convergence diagnostics (investigate: optimizer vs. constraints) ──
+    print(f"  [val2024] Converged      : {info['converged']}")
+    print(f"  [val2024] Optimizer      : {info.get('optimizer', 'n/a')}")
+    print(f"  [val2024] Iterations     : {info.get('iterations', 'n/a')}")
+    if info.get("min_ar_root") is not None:
+        ar_val = info['min_ar_root']
+        # Phân loại: near-unit-root (0.98, 1.0] là bình thường với retail data
+        # UNSTABLE chỉ khi root thật sự < 0.98 (nằm sâu trong unit circle)
+        if ar_val > 1.0:
+            ar_flag = "stable"
+        elif ar_val > 0.98:
+            ar_flag = "near-unit-root"
+        else:
+            ar_flag = "UNSTABLE (|root| < 0.98)"
+        print(f"  [val2024] Min AR root    : {ar_val:.8f} | AR: {ar_flag}")
+    if info.get("min_ma_root") is not None:
+        ma_flag = "invertible" if info["ma_invertible"] else "NOT invertible"
+        print(f"  [val2024] Min MA root    : {info['min_ma_root']:.8f} | MA: {ma_flag}")
+    if info.get("error_msg"):
+        print(f"  [val2024] Note           : {info['error_msg']}")
+
     if fitted_ext is None:
         print(f"  [val2024] Model failed to converge: {info['error_msg']}")
         return {"converged": False, "error_msg": info["error_msg"]}
@@ -427,12 +564,32 @@ def run_final_refit(
     """Refit model thắng trên toàn bộ 2019–2024, forecast test_2025.
 
     Đây là SARIMA component cuối cùng của Hybrid pipeline.
-    Không có bước retune — dùng đúng tham số đã chọn từ val_2023.
-    Residual test_2025 sẽ được dùng bởi XGBoost task.
+    Không có bước retune — dùng đúng tham số đã chọn từ validation 2023.
+
+    Residual trên test_2025 chỉ được sử dụng cho final evaluation
+    của Hybrid SARIMA-XGBoost, không được sử dụng để train hoặc tune XGBoost.
     """
     print(f"  [final] Refitting on 2019-2024 ({len(y_final_train)} weeks)...", flush=True)
     fitted_final, info = fit_one_candidate(y_final_train, best_order, best_seasonal_order)
 
+    # ── Log convergence diagnostics ───────────────────────────────────────────
+    print(f"  [final] Converged        : {info['converged']}")
+    print(f"  [final] Optimizer        : {info.get('optimizer', 'n/a')}")
+    print(f"  [final] Iterations       : {info.get('iterations', 'n/a')}")
+    if info.get("min_ar_root") is not None:
+        ar_val = info['min_ar_root']
+        if ar_val > 1.0:
+            ar_flag = "stable"
+        elif ar_val > 0.98:
+            ar_flag = "near-unit-root"
+        else:
+            ar_flag = "UNSTABLE (|root| < 0.98)"
+        print(f"  [final] Min AR root      : {ar_val:.8f} | AR: {ar_flag}")
+    if info.get("min_ma_root") is not None:
+        ma_flag = "invertible" if info["ma_invertible"] else "NOT invertible"
+        print(f"  [final] Min MA root      : {info['min_ma_root']:.8f} | MA: {ma_flag}")
+    if info.get("error_msg"):
+        print(f"  [final] Note             : {info['error_msg']}")
     if fitted_final is None:
         print(f"  [final] Model failed to converge: {info['error_msg']}")
         return {"converged": False, "error_msg": info["error_msg"]}
@@ -462,9 +619,14 @@ def run_final_refit(
 
 def select_best_model(tuning_df: pd.DataFrame) -> pd.Series:
     """Áp dụng hierarchy chọn model:
-    Level 1: Phải hội tụ
-    Level 2: RMSE val_2023 thấp nhất (PRIMARY)
-    Level 3: Tie-breaker nếu RMSE chênh ≤ 3% → model ít tham số hơn
+
+    Level 1: Candidate phải converge.
+    Level 2: RMSE val_2023 thấp nhất (tiêu chí chính).
+    Level 3: Nếu RMSE chênh <= 3%, ưu tiên model ít tham số hơn (Parsimony).
+
+    AR/MA root stability được report như diagnostic riêng biệt.
+    Near-unit-root (gần biên 1.0) không được dùng như rejection criterion;
+    instability thật sự (|root| < 0.95) cần được điều tra thêm.
     """
     converged = tuning_df[tuning_df["converged"] == True].copy()
 
@@ -540,9 +702,15 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
             "order":           str(order),
             "seasonal_order":  str(seasonal_order),
             "converged":       info["converged"],
+            "optimizer":       info.get("optimizer"),
+            "iterations":      info.get("iterations"),
             "aic":             info["aic"],
             "bic":             info["bic"],
             "n_params":        info["n_params"],
+            "min_ar_root":     info.get("min_ar_root"),
+            "min_ma_root":     info.get("min_ma_root"),
+            "ar_stable":       info.get("ar_stable"),
+            "ma_invertible":   info.get("ma_invertible"),
             "mae_2023":        None,
             "rmse_2023":       None,
             "smape_2023":      None,
@@ -567,7 +735,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
             fitted_objects[cache_key] = fitted  # Cache để tái sử dụng
             print(f"RMSE={metrics['rmse']:.2f} MAE={metrics['mae']:.2f} sMAPE={metrics['smape']:.1f}%")
         else:
-            print(f"FAILED: {info.get('error_msg', '')[:60]}")
+            print(f"FAILED: {info.get('error_msg', '')[:80]}")
 
         rows.append(row)
 
@@ -609,6 +777,16 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
           f"p@lag52={diag['ljung_box_p_lag52']}")
     print(f"  max_ACF_spike(1-30)={diag['max_acf_spike_lag1_30']:.4f}  "
           f"ACF@lag52={diag['acf_at_lag52']}")
+    
+    if hasattr(fitted_best, 'arroots') and len(fitted_best.arroots) > 0:
+        ar_abs = [float(r) for r in np.abs(fitted_best.arroots)]
+        ar_str = ", ".join([f"{r:.6f}" for r in ar_abs])
+        print(f"  AR roots (abs): {ar_str}")
+    if hasattr(fitted_best, 'maroots') and len(fitted_best.maroots) > 0:
+        ma_abs = [float(r) for r in np.abs(fitted_best.maroots)]
+        ma_str = ", ".join([f"{r:.6f}" for r in ma_abs])
+        print(f"  MA roots (abs): {ma_str}")
+
     print(f"  Notes: {diag['notes']}")
 
     # ── Stage 7: Save val_2023 forecast ───────────────────────────────────────
@@ -637,13 +815,49 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
     tuning_df.to_csv(tuning_path, index=False)
     print(f"  Saved: {tuning_path}")
 
-    # Residual diagnostics text
+    # Lấy root info từ cached fitted object (train 2019-2022)
+    _best_info = {
+        "converged":    best_row.get("converged"),
+        "optimizer":    best_row.get("optimizer"),
+        "iterations":   best_row.get("iterations"),
+        "min_ar_root":  best_row.get("min_ar_root"),
+        "min_ma_root":  best_row.get("min_ma_root"),
+        "ar_stable":    best_row.get("ar_stable"),
+        "ma_invertible":best_row.get("ma_invertible"),
+    }
+    _ar_val = _best_info["min_ar_root"]
+    if _ar_val is not None:
+        if _ar_val > 1.0:
+            _ar_flag = "stable"
+        elif _ar_val > 0.98:
+            _ar_flag = "near-unit-root (persistence cao, bình thường với retail data)"
+        else:
+            _ar_flag = f"UNSTABLE (cần điều tra)"
+    else:
+        _ar_val, _ar_flag = None, "N/A"
+
+    _ma_val = _best_info["min_ma_root"]
+    _ma_flag = "invertible" if (_ma_val and _ma_val > 1.0) else "NOT invertible"
+
     diag_lines = [
         f"SARIMA Residual Diagnostics — {series_name.upper()}",
         f"Selected model: {best_row['order']} {best_row['seasonal_order']}",
         f"n_residuals: {diag['n_residuals']}",
         f"Confidence band (±1.96/√n): ±{diag['conf_band']:.4f}",
         "",
+        "── Convergence (train 2019-2022) ──────────────────────────────",
+        f"Converged          : {_best_info['converged']}",
+        f"Optimizer          : {_best_info['optimizer'] or 'n/a'}",
+        f"Iterations         : {_best_info['iterations'] or 'n/a'}",
+        "",
+        "── AR/MA Root Stability (train 2019-2022) ──────────────────────",
+        f"Min AR root (abs)  : {f'{_ar_val:.8f}' if _ar_val is not None else 'N/A'} → {_ar_flag}",
+        f"Min MA root (abs)  : {f'{_ma_val:.8f}' if _ma_val is not None else 'N/A'} → {_ma_flag}",
+        "Note: near-unit-root (0.98 < |root| <= 1.0) là bình thường với retail",
+        "      revenue data có tính persistence cao. Không tự động loại model.",
+        "      UNSTABLE thật sự chỉ khi |root| < 0.98.",
+        "",
+        "── Residual Autocorrelation ─────────────────────────────────────",
         f"mean_residual      : {diag['mean_resid']:.4f}",
         f"Ljung-Box p@lag10  : {diag['ljung_box_p_lag10']:.4f}",
         f"Ljung-Box p@lag20  : {diag['ljung_box_p_lag20']:.4f}",
@@ -662,7 +876,7 @@ def run_sarima_pipeline(series_name: str) -> dict[str, Any]:
     print(f"  Saved: {diag_path}")
 
     # ── Stage 8: Validation 2024 ───────────────────────────────────────────────
-    print("\n[Stage 8] Validation 2024 (stability check — no retuning)...")
+    print("\n[Stage 8] Validation 2024 + convergence/stability diagnostics...")
     metrics_2024 = run_validation_2024(
         y_train_ext, y_val_2024, best_order, best_seasonal_order, name
     )

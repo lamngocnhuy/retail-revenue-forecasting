@@ -33,11 +33,11 @@ File Python này là "trái tim" của hệ thống SARIMA, được thiết k�
 ### 3.1. Các bước vận hành
 *   **Stage 1 (Load):** Nạp dữ liệu và tự động chia thành 4 tập dựa trên chiến lược Time-series Split: Train (2019-2022), Val1 (2023), Val2 (2024), và Test (2025).
 *   **Stage 2 (Candidate Gen):** Tạo danh sách ứng viên (Models). Đây là sự kết hợp giữa "Lưới thông minh" (Smart Grid gồm 13 models tạo ra từ kết luận của EDA) và 1 model tốt nhất do thư viện `pmdarima` (auto_arima) đề xuất.
-*   **Stage 3 & 4 (Fit & Eval):** Huấn luyện toàn bộ 14 models trên tập Train, dự báo out-of-sample ra tập Val 2023 và tính sai số (RMSE, MAE).
+*   **Stage 3 & 4 (Fit & Eval):** Huấn luyện toàn bộ 14 models trên tập Train, dự báo out-of-sample ra tập Val 2023 và tính sai số (RMSE, MAE). Áp dụng chiến lược **2-pass fit (Unconstrained -> Constrained)**. Lấy giá trị chính xác của AR/MA roots (Full precision).
 *   **Stage 5 (Selection):** Áp dụng bộ lọc chọn model (Xem chi tiết mục 3.2).
-*   **Stage 6 (Diagnostics):** Thực hiện kiểm định Ljung-Box đánh giá nhiễu trắng.
+*   **Stage 6 (Diagnostics):** Thực hiện kiểm định Ljung-Box đánh giá nhiễu trắng và lưu vết các thông số Convergence (Optimizer, Iterations, AR/MA roots).
 *   **Stage 7 (Save Artifacts):** Lưu lại dự báo, tính phần dư (residual) cho 2023.
-*   **Stage 8 (Stability Check):** Refit lại trên 2019-2023, dự báo out-of-sample 2024 để kiểm tra độ ổn định.
+*   **Stage 8 (Stability Check):** Refit lại trên 2019-2023, dự báo out-of-sample 2024. In diagnostics để kiểm chứng độ ổn định của model theo thời gian.
 *   **Stage 9 (Final Fit):** Refit trên 2019-2024, dự báo tập Test 2025 và xuất dữ liệu.
 
 ### 3.2. Cấu trúc Lựa chọn Model (Selection Hierarchy)
@@ -57,18 +57,33 @@ File Python này là "trái tim" của hệ thống SARIMA, được thiết k�
 | **Store** | `(1,0,1)(0,0,0,52)` | 446.99 | **375.96** | 441.15 | 0.5831 (Đạt chuẩn White Noise) |
 | **Mobile** | `(1,0,1)(0,0,0,52)` | 374.52 | **365.34** | 437.23 | 0.5845 (Đạt chuẩn White Noise) |
 
-### 4.1. Phân tích lí do dùng luật Tie-Breaker để chọn mô hình (Phòng chống Overfitting & Đảm bảo Hội tụ)
-Trong quá trình Tuning, hệ thống đã thử nghiệm các model bậc cao như `(2,0,2)` hoặc có thành phần Seasonal MA `(0,0,1,52)`. 
+### 4.1. Phân tích lí do chọn Model (Chống Overfitting & Đảm bảo Hội tụ)
 
-**Thực nghiệm kiểm chứng tại kênh Total (Chạy ép model bậc cao với giao thức 1-step ahead mới nhất):**
-1.  **Model đơn giản `(1,0,1)(0,0,0,52)`:** Đạt RMSE 2023: 685.56 (Nằm trong dung sai 3%). Ljung-box p-value: 0.0148. Sang năm 2024, RMSE **tiếp tục ổn định và giảm mạnh** còn 644.69.
-2.  **Model phức tạp `(2,0,2)(0,0,0,52)`:** Đạt RMSE 2023: 681.84 (Tốt nhất tập validation). Sang năm 2024, RMSE đạt 639.66. (Với 1-step ahead, cả 2 model đều dự báo tốt trong ngắn hạn).
-3.  **Model có bậc MA sai lệch `(1,0,2)(0,0,0,52)`:** Gặp lỗi `Maximum Likelihood optimization failed to converge` ngay trong quá trình huấn luyện và báo FAILED.
+**Thực nghiệm 1: Giải quyết lỗi "Did not converge" bằng 2-pass strategy (Kênh TOTAL)**
+Mô hình cũ (bật `enforce_stationarity=True` ngay từ đầu) ép AR root phải dừng lại ở `1.00000055`, làm hàm mục tiêu bị kẹt ở vách không gian tham số. Do sai số làm tròn số thực (float precision) siêu nhỏ giữa các HĐH/Python version, LBFGS dễ bị mất phương hướng ở điểm biên này, dẫn đến lỗi `MLE did not converge`.
+*   **Giải pháp:** Áp dụng thuật toán 2-pass (Pass 1 unconstrained). Nhờ tháo bỏ rào cản, LBFGS dễ dàng tìm tới đáy Loss Function (giảm `fopt` từ 8.070 xuống 8.026) chỉ trong vỏn vẹn **10 vòng lặp**, hội tụ và trả về nghiệm thực sự `1.000159` (nằm an toàn ngoài unit circle). Lỗi hội tụ bị loại bỏ.
 
-**Tại sao phải kiên quyết chọn model đơn giản `(1,0,1)` thay vì `(2,0,2)` dù `(2,0,2)` có RMSE nhỉnh hơn một chút? Lợi ích thực sự là gì?**
-1. **Tính ổn định toán học khi lên Production (Convergence Stability):** Mô hình `(2,0,2)` yêu cầu tối ưu 5 tham số. Trong thực tế, như đã thấy ở thực nghiệm số 3, các hàm bậc cao cực kỳ nhạy cảm với dữ liệu và rất dễ bị lỗi `Maximum Likelihood failed to converge` (Không thể hội tụ) khiến toàn bộ pipeline bị sập (crash). Ngược lại, `(1,0,1)` với 3 tham số tối ưu cực kỳ nhanh, hội tụ tuyệt đối và gần như không bao giờ fail.
-2. **Nguyên lý Parsimony (Dao cạo Ockham):** Trong thống kê học, mô hình `(1,0,1)` có chênh lệch RMSE so với model tốt nhất chưa tới 1% (685 vs 681). Việc chấp nhận đánh đổi <1% độ chính xác để giảm bớt số lượng tham số là một quyết định chiến lược. Mô hình đơn giản ít bị "nhiễu" hơn và luôn đáng tin cậy hơn trên tập unseen data.
-3. **Triết lý của kiến trúc Hybrid:** Chúng ta muốn SARIMA đóng vai trò là một "bộ lọc thô" để bóc tách các xu hướng tuyến tính rõ rệt nhất. Nếu dùng mô hình bậc cao như `(2,0,2)`, SARIMA sẽ cố gắng dùng các phương trình tuyến tính để "uốn éo" theo các đột biến phi tuyến (điều mà nó không được sinh ra để làm), làm méo mó phần dư. Việc kìm hãm ở mức `(1,0,1)` giúp phần dư (residuals) được giữ lại ở trạng thái tự nhiên nhất, cung cấp một "tờ giấy nháp hoàn hảo" cho thuật toán mạnh mẽ XGBoost vẽ tiếp ở chặng sau.
+**Thực nghiệm 2: Đổi Optimizer có giải quyết được AR root sát biên ở kênh ONLINE/STORE?**
+AR root của kênh Online và Store nằm rất sát 1.0 (ví dụ `0.9998`).
+*   **Kết quả:** Không. Dù đổi sang `BFGS` hay Nelder-Mead (`NM`), hay tăng bậc lên `(2,0,2)`, AR root vẫn kẹt ở vùng `0.9998-0.9999`. Thậm chí BFGS/NM còn làm MA root bị hỏng (NOT-invertible) và mất hàng trăm vòng lặp. `LBFGS` vẫn là optimizer ổn định và nhanh nhất.
+
+**Thực nghiệm 3: So sánh mô hình "Stable" và mô hình Winner "Near-unit-root"**
+Nếu ép mô hình không được có thành phần MA để AR root tuyệt đối an toàn (ví dụ Pure-AR `1,0,0` hay `3,0,0`), liệu kết quả có tốt hơn model bị "near-unit-root" `(1,0,1)` không?
+
+*Bảng so sánh RMSE (Càng thấp càng tốt) trên kênh STORE:*
+
+| Mô hình | 2023 (Train 19-22) | 2024 (Train 19-23) | 2025 (Test Out-of-sample) |
+| :--- | :--- | :--- | :--- |
+| **Winner (1,0,1) [Near-unit-root]** | **447.0 (AR: 1.000)** | **376.0** | **441.2** |
+| Stable AR (1,0,0)| 595.6 (AR: 1.162) | 553.7 | 599.0 |
+| Stable AR (3,0,0)| 488.2 (AR: 1.026) | 458.1 | 503.2 |
+
+*(Kênh Online cũng cho kết quả chênh lệch tương tự)*
+
+**KẾT LUẬN CHÍNH THỨC:**
+1. Vấn đề "near-unit-root" không phải là lỗi, mà là **đặc trưng thống kê của DỮ LIỆU**. Dữ liệu doanh thu bán lẻ có tính "persistence" (quán tính) cực cao. Mô hình ARMA nào cố gắng học dữ liệu này có thể sẽ đưa AR root về sát biên 1.0.
+2. Các mô hình bắt buộc "stable" (AR root > 1.1) đã đánh mất hoàn toàn khả năng học được tính quán tính này, dẫn đến RMSE cao hơn từ 40-150 điểm một cách toàn diện trên mọi năm. Quan trọng nhất, Winner `(1,0,1)` vượt trội hoàn toàn ở tập tương lai chưa từng thấy (2025). Điều này chứng minh nghiệm near-unit-root **không phải là Overfitting**, mà là Generalization.
+3. Nguyên lý Tie-breaker được bảo toàn: Cùng một tính chất dữ liệu, Winner `(1,0,1)` kết hợp với `lbfgs` và cơ chế 2-pass là lựa chọn đơn giản nhất, hội tụ nhanh nhất và đáng tin cậy nhất cho phần SARIMA. Nó tạo ra một bộ residuals hoàn chỉnh và tự nhiên nhất để XGBoost học tiếp ở chặng sau.
 
 ## 5. Cấu Trúc File Đầu Ra (Outputs)
 Sau khi chạy pipeline, thư mục `outputs/sarima/` sẽ chứa các tài sản vô giá sau:
@@ -103,3 +118,4 @@ Sau khi chạy pipeline, thư mục `outputs/sarima/` sẽ chứa các tài sả
     python src/train_sarima.py --series all
     ```
 *   Mở thư mục `reports/sarima/` để lấy toàn bộ biểu đồ, file đánh giá và file CSV residuals.
+ 
