@@ -1,0 +1,30 @@
+SARIMA Residual Diagnostics — TOTAL
+Selected model: (1, 0, 1) (0, 0, 0, 52)
+n_residuals: 209
+Confidence band (±1.96/√n): ±0.1356
+
+── Convergence (train 2019-2022) ──────────────────────────────
+Converged          : True
+Optimizer          : lbfgs
+Iterations         : 11
+
+── AR/MA Root Stability (train 2019-2022) ──────────────────────
+Min AR root (abs)  : 1.00043832 → stable
+Min MA root (abs)  : 1.00573695 → invertible
+Note: near-unit-root (0.98 < |root| <= 1.0) là bình thường với retail
+      revenue data có tính persistence cao. Không tự động loại model.
+      UNSTABLE thật sự chỉ khi |root| < 0.98.
+
+── Residual Autocorrelation ─────────────────────────────────────
+mean_residual      : 19.0949
+Ljung-Box p@lag10  : 0.0148
+Ljung-Box p@lag20  : 0.1607
+Ljung-Box p@lag52  : 0.2407
+max_ACF_spike(1-30): 0.1860
+ACF_at_lag52       : 0.047
+
+Notes:
+INFO: Ljung-Box lag10 p=0.015 < 0.05 -> residual con autocorrelation -> XGBoost co the hoc them
+
+Reminder: Ljung-Box failure is diagnostic info, NOT model rejection criterion.
+Residual autocorrelation → signal for XGBoost Hybrid to investigate.

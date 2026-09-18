@@ -1,0 +1,203 @@
+SARIMA Optimizer & Model Stability Investigation
+======================================================================
+Purpose: So sánh optimizer (lbfgs/bfgs/nm) và model candidates
+         để xác định nguyên nhân near-unit-root và confirm chọn winner.
+
+Interpretation:
+  stable        : |AR root| > 1.0  (ngoài unit circle, tốt nhất)
+  near-unit-root: 0.98 < |AR root| <= 1.0  (persistence cao, bình thường với retail)
+  UNSTABLE      : |AR root| < 0.98  (cần xử lý)
+
+Conclusion criteria: Nếu model đơn giản hơn (1,0,1) cho near-unit-root
+  mà model phức tạp hơn (2,0,2) cũng vậy → vấn đề thuộc về DỮ LIỆU, không phải model.
+
+======================================================================
+  CHANNEL: TOTAL
+  Training data: 2019-2023 (261 weeks)
+======================================================================
+
+Model: winner     (1,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   10 | AR root: 1.00015969 [stable] | MA root: 1.00451285 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00015796 [stable] | MA root: 0.99998498 [NOT-invertible(0.999985)]
+  nm     | Converged: True  | Iters:  104 | AR root: 1.00015796 [stable] | MA root: 0.99998499 [NOT-invertible(0.999985)]
+
+Model: rank-2     (2,0,2)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    9 | AR root: 1.00014719 [stable] | MA root: 1.00188802 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00014284 [stable] | MA root: 0.99993782 [NOT-invertible(0.999938)]
+  nm     | Converged: True  | Iters:  326 | AR root: 1.00014284 [stable] | MA root: 0.99993780 [NOT-invertible(0.999938)]
+
+Model: rank-3     (2,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   20 | AR root: 1.00015235 [stable] | MA root: 1.00469309 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00015511 [stable] | MA root: 0.99998453 [NOT-invertible(0.999985)]
+  nm     | Converged: True  | Iters:  215 | AR root: 1.00015511 [stable] | MA root: 0.99998454 [NOT-invertible(0.999985)]
+
+Model: pure-AR    (1,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.05279565 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.05279563 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:   41 | AR root: 1.05279563 [stable] | MA root: N/A
+
+Model: pure-MA    (0,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   27 | AR root: N/A | MA root: 1.31983872 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: N/A | MA root: 1.31983318 [invertible]
+  nm     | Converged: True  | Iters:   65 | AR root: N/A | MA root: 1.31983024 [invertible]
+
+Model: higher-AR  (3,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.01010045 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.01010045 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:  132 | AR root: 1.01010045 [stable] | MA root: N/A
+
+Model: w/Seasonal (1,0,1)(1,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   23 | AR root: 1.00022759 [stable] | MA root: 1.00782563 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00023138 [stable] | MA root: 1.00000000 [invertible]
+  nm     | Converged: True  | Iters:  324 | AR root: 1.00023138 [stable] | MA root: 1.00000001 [invertible]
+
+
+======================================================================
+  CHANNEL: ONLINE
+  Training data: 2019-2023 (261 weeks)
+======================================================================
+
+Model: winner     (1,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   11 | AR root: 0.99996418 [near-unit-root] | MA root: 1.00418955 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99995774 [near-unit-root] | MA root: 0.99999867 [NOT-invertible(0.999999)]
+  nm     | Converged: True  | Iters:  112 | AR root: 0.99995774 [near-unit-root] | MA root: 0.99999869 [NOT-invertible(0.999999)]
+
+Model: rank-2     (2,0,2)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   17 | AR root: 0.99995849 [near-unit-root] | MA root: 1.00268722 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99996426 [near-unit-root] | MA root: 1.00000014 [invertible]
+  nm     | Converged: True  | Iters:  343 | AR root: 0.99995646 [near-unit-root] | MA root: 1.00000227 [invertible]
+
+Model: rank-3     (2,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   26 | AR root: 0.99996680 [near-unit-root] | MA root: 1.00412852 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99995864 [near-unit-root] | MA root: 0.99999863 [NOT-invertible(0.999999)]
+  nm     | Converged: True  | Iters:  194 | AR root: 0.99995864 [near-unit-root] | MA root: 0.99999860 [NOT-invertible(0.999999)]
+
+Model: pure-AR    (1,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.13584424 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.13584423 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:   40 | AR root: 1.13584423 [stable] | MA root: N/A
+
+Model: pure-MA    (0,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   22 | AR root: N/A | MA root: 1.65281878 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: N/A | MA root: 1.65280433 [invertible]
+  nm     | Converged: True  | Iters:   55 | AR root: N/A | MA root: 1.65280531 [invertible]
+
+Model: higher-AR  (3,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.02578475 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.02578475 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:  128 | AR root: 1.02578475 [stable] | MA root: N/A
+
+Model: w/Seasonal (1,0,1)(1,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   18 | AR root: 0.99976946 [near-unit-root] | MA root: 1.00441276 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99976167 [near-unit-root] | MA root: 1.00000003 [invertible]
+  nm     | Converged: True  | Iters:  291 | AR root: 0.99976167 [near-unit-root] | MA root: 0.99999998 [NOT-invertible(1.000000)]
+
+
+======================================================================
+  CHANNEL: STORE
+  Training data: 2019-2023 (261 weeks)
+======================================================================
+
+Model: winner     (1,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   14 | AR root: 0.99984988 [near-unit-root] | MA root: 1.00428035 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99984427 [near-unit-root] | MA root: 0.99999763 [NOT-invertible(0.999998)]
+  nm     | Converged: True  | Iters:  109 | AR root: 0.99984427 [near-unit-root] | MA root: 0.99999764 [NOT-invertible(0.999998)]
+
+Model: rank-2     (2,0,2)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   17 | AR root: 0.99985194 [near-unit-root] | MA root: 1.00230827 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99985061 [near-unit-root] | MA root: 0.99999717 [NOT-invertible(0.999997)]
+  nm     | Converged: True  | Iters:  360 | AR root: 0.99985061 [near-unit-root] | MA root: 0.99999718 [NOT-invertible(0.999997)]
+
+Model: rank-3     (2,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   29 | AR root: 0.99984747 [near-unit-root] | MA root: 1.00447694 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99984261 [near-unit-root] | MA root: 0.99999770 [NOT-invertible(0.999998)]
+  nm     | Converged: True  | Iters:  272 | AR root: 0.99984261 [near-unit-root] | MA root: 0.99999771 [NOT-invertible(0.999998)]
+
+Model: pure-AR    (1,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.15091350 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.15091349 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:   38 | AR root: 1.15091349 [stable] | MA root: N/A
+
+Model: pure-MA    (0,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   23 | AR root: N/A | MA root: 1.66681666 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: N/A | MA root: 1.66681407 [invertible]
+  nm     | Converged: True  | Iters:   59 | AR root: N/A | MA root: 1.66681165 [invertible]
+
+Model: higher-AR  (3,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.02441914 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.02441914 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:  125 | AR root: 1.02441914 [stable] | MA root: N/A
+
+Model: w/Seasonal (1,0,1)(1,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   22 | AR root: 0.99977178 [near-unit-root] | MA root: 1.00616344 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 0.99976874 [near-unit-root] | MA root: 1.00000000 [invertible]
+  nm     | Converged: True  | Iters:  206 | AR root: 0.99976874 [near-unit-root] | MA root: 1.00000002 [invertible]
+
+
+======================================================================
+  CHANNEL: MOBILE
+  Training data: 2019-2023 (261 weeks)
+======================================================================
+
+Model: winner     (1,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    9 | AR root: 1.00066675 [stable] | MA root: 1.00431912 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00067089 [stable] | MA root: 0.99999291 [NOT-invertible(0.999993)]
+  nm     | Converged: True  | Iters:   96 | AR root: 1.00067089 [stable] | MA root: 0.99999293 [NOT-invertible(0.999993)]
+
+Model: rank-2     (2,0,2)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   29 | AR root: 1.00067090 [stable] | MA root: 1.00248823 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00067169 [stable] | MA root: 0.99994079 [NOT-invertible(0.999941)]
+  nm     | Converged: True  | Iters:  414 | AR root: 1.00065218 [stable] | MA root: 0.99991821 [NOT-invertible(0.999918)]
+
+Model: rank-3     (2,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   21 | AR root: 1.00066960 [stable] | MA root: 1.00427836 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00067037 [stable] | MA root: 0.99999229 [NOT-invertible(0.999992)]
+  nm     | Converged: True  | Iters:  232 | AR root: 1.00067037 [stable] | MA root: 0.99999235 [NOT-invertible(0.999992)]
+
+Model: pure-AR    (1,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.13903261 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.13903260 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:   39 | AR root: 1.13903260 [stable] | MA root: N/A
+
+Model: pure-MA    (0,0,1)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:   22 | AR root: N/A | MA root: 1.68919738 [invertible]
+  bfgs   | Converged: True  | Iters:   -1 | AR root: N/A | MA root: 1.68919074 [invertible]
+  nm     | Converged: True  | Iters:   57 | AR root: N/A | MA root: 1.68918380 [invertible]
+
+Model: higher-AR  (3,0,0)(0,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: True  | Iters:    1 | AR root: 1.02518892 [stable] | MA root: N/A
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.02518892 [stable] | MA root: N/A
+  nm     | Converged: True  | Iters:  121 | AR root: 1.02518892 [stable] | MA root: N/A
+
+Model: w/Seasonal (1,0,1)(1,0,0,52)
+────────────────────────────────────────────────────────────
+  lbfgs  | Converged: False | Error: Did not converge in 15 iters
+  bfgs   | Converged: True  | Iters:   -1 | AR root: 1.00117652 [stable] | MA root: 1.00000000 [invertible]
+  nm     | Converged: True  | Iters:  218 | AR root: 1.00117652 [stable] | MA root: 0.99999995 [NOT-invertible(1.000000)]
