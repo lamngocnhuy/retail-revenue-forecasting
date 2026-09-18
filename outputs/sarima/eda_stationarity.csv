@@ -1,0 +1,5 @@
+series,adf_stat_orig,adf_p_orig,kpss_stat_orig,kpss_p_orig,adf_p_diff1,kpss_p_diff1,conclusion_d
+Total,-14.8522,0.0,0.2904,0.1,0.0,0.1,d=0  (stationary)
+Online,-13.8054,0.0,0.0645,0.1,0.0,0.1,d=0  (stationary)
+Store,-15.3661,0.0,0.107,0.1,0.0,0.1,d=0  (stationary)
+Mobile,-14.5296,0.0,0.373,0.0888,0.0,0.1,d=0  (stationary)
