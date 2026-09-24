@@ -1,21 +1,24 @@
 """
-This module implements baseline forecasting models for retail revenue prediction.
-
-The pipeline loads the datasets, defines baseline models, evaluates their
-performance on the 2023 and 2024 validation sets, selects a model using
-multiple validation criteria, and verifies the selection on the 2025 test set.
-
-Implemented baselines include Naive, Naive Drift, Moving Average, Seasonal
-Naive, and Holt-Winters exponential smoothing models. The evaluation metrics
-are MAE, MSE, MAPE, and MASE."""
+Baseline models for retail revenue forecasting.
+This module implements various baseline forecasting models, including:
+- Naive
+- Moving Average (MA)
+- Seasonal Naive
+- Naive Drift
+- Holt-Winters (Exponential Smoothing)
+and provides functions to evaluate their performance using metrics 
+such as MAE, RMSE, and sMAPE.
+"""
 import pandas as pd
+import numpy as np
 from pathlib import Path
+
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-from sklearn.metrics import (mean_absolute_error, mean_squared_error, mean_absolute_percentage_error) 
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from tqdm import tqdm
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_PATH = BASE_DIR / "data" / "processed"
 
-# baseline: navie - MA - Seasonal Navie - Navie drift - Holt Winters --> val 23 --> eval --> val 24 --> val --> test25 -- final eval
 def load_dataset():
     files = {
         "train_2022": "train_2019_2022.csv",
@@ -44,13 +47,14 @@ def navie_seasonal_baseline(dt,s):
     return dt.shift(s)
 
 def naive_drift_baseline(dt):
-    """Naive drift baseline: last week's value plus the average change over the entire series."""
-    n = len(dt)
-    drift = (dt.iloc[-1] - dt.iloc[0]) / (n - 1) if n > 1 else 0
-    pred = dt.shift(1) + drift
-    return pred
+    """Naive drift baseline: last week's value plus the average change over the history is this week's prediction."""
+    preds = [None] * len(dt)
+    for t in range(2, len(dt)):
+        history = dt.iloc[:t]
+        drift = (history.iloc[-1] - history.iloc[0]) / (len(history) - 1)
+        preds[t] = history.iloc[-1] + drift
+    return pd.Series(preds, index=dt.index)
 
-from tqdm import tqdm
 
 def holt_winters_baseline(dt, season_length=52, trend="add", seasonal="add"):
     """Holt-Winters baseline: Exponential Smoothing with specified trend and seasonal components."""
@@ -86,46 +90,23 @@ def holt_winters_baseline(dt, season_length=52, trend="add", seasonal="add"):
 
     return pd.Series(preds, index=dt.index)
 
-#eval: mae, mse, mape mase
-def evaluate(y_true, y_pred, y_train=None):
+#eval: mae, rmse, smape
+def evaluate(y_true, y_pred):
     """Evaluate the performance of a forecasting model."""
     mae = mean_absolute_error(y_true, y_pred)
-    mse = mean_squared_error(y_true, y_pred)
-    mape = mean_absolute_percentage_error(y_true, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    
+    actual = np.asarray(y_true, dtype=float)
+    predicted = np.asarray(y_pred, dtype=float)
+    denom = (np.abs(actual) + np.abs(predicted)) / 2.0
+    smape_vals = np.where(denom == 0.0, 0.0, np.abs(actual - predicted) / denom)
+    smape = float(100.0 * np.mean(smape_vals))
 
-    naive_errors = y_train.diff().abs().dropna()
-    scale = naive_errors.mean()
-    mase = mae / scale if scale != 0 else float("nan")
-    return mae, mse, mape, mase
-
-def prediction(model_func, history, y_test):
-    """Generate predictions using the specified model function."""
-    y_pred = model_func(history)
-    y_pred = y_pred.iloc[-len(y_test):]
-    return y_pred.reset_index(drop=True)
-
-def run_baseline(model_name, model_func, history, y_true, y_train):
-    """Run a baseline model and evaluate its performance."""
-    y_pred = prediction(model_func, history, y_true)
-    y_true = y_true.reset_index(drop=True)
-
-    # bỏ nân tranhc lỗi mểic
-    mask = y_pred.notna() & y_true.notna()
-    y_true_f, y_pred_f = y_true[mask], y_pred[mask]
-
-    if len(y_true_f) == 0:
-        return {"Baseline": model_name, "MAE": float("nan"), "MSE": float("nan"),
-                "MAPE": float("nan"), "MASE": float("nan")}
-
-    mae, mse, mape, mase = evaluate(y_true_f, y_pred_f, y_train)
     return {
-        "Baseline": model_name,
-        "MAE": mae,
-        "MSE": mse,
-        "MAPE": mape,
-        "MASE": mase,
+        "MAE": round(mae, 4),
+        "RMSE": round(rmse, 4),
+        "sMAPE": round(smape, 4),
     }
-
 
 def build_models():
     """Build a dictionary of baseline models."""
@@ -134,7 +115,7 @@ def build_models():
         "Naive-Drift": naive_drift_baseline,
     }
 
-    for window in range(1, 53):
+    for window in range(2, 53):
         models[f"MA-{window}"] = lambda x, w=window: ma_baseline(x, w)
 
     for shift in [13, 26, 39, 52]:
@@ -145,116 +126,191 @@ def build_models():
 
     return models
 
+def prediction(model_func, history, y_test):
+    """Generate predictions using the specified model function."""
+    y_pred = model_func(history)
+    y_pred = y_pred.iloc[-len(y_test):]
+    return y_pred.reset_index(drop=True)
 
-def run_all_baseline(his, y_true, y_train):
-    """Run all baseline models and return their evaluation results."""
+def select_best_baseline(result_23):
+    valid = result_23.dropna(subset=["RMSE"]).copy()
+
+    if valid.empty:
+        raise RuntimeError("No valid baseline model.")
+
+    return valid.sort_values("RMSE").iloc[0]
+
+def evaluate_selected_baseline(model_name, model_func, y_train, y_eval):
+    history = pd.concat([y_train, y_eval], ignore_index=True)
+
+    y_pred = prediction( model_func, history, y_eval)
+
+    # = sarima
+    y_pred = y_pred.clip(lower=0)
+    y_true = y_eval.reset_index(drop=True)
+
+    mask = y_pred.notna() & y_true.notna()
+    y_pred = y_pred[mask]
+    y_true = y_true[mask]
+
+    metrics = evaluate(y_true, y_pred)
+
+    return {
+        "Baseline": model_name,
+        **metrics
+    }
+
+def run_baseline(model_name, model_func, history, y_true):
+    """Run a baseline model and evaluate its performance."""
+    y_pred = prediction(model_func, history, y_true)
+    y_true = y_true.reset_index(drop=True)
+
+    # bỏ nân tranhc lỗi mểic
+    mask = y_pred.notna() & y_true.notna()
+    y_true_f, y_pred_f = y_true[mask], y_pred[mask]
+
+    if len(y_true_f) == 0:
+        return {
+            "Baseline": model_name,
+            "MAE": float("nan"),
+            "RMSE": float("nan"),
+            "sMAPE": float("nan"),
+        }
+    #
+    y_pred_f = y_pred_f.clip(lower=0)
+
+    metrics = evaluate(y_true_f, y_pred_f)
+
+    return {
+        "Baseline": model_name,
+        **metrics,
+    }
+
+
+def run_all_baseline(history, y_true):
+    """Run all baseline models and evaluate their performance."""
     results = []
+
     for name, model in build_models().items():
-        results.append(run_baseline(name, model, his, y_true, y_train))
+        results.append(run_baseline(name, model, history, y_true))
+ 
     return pd.DataFrame(results)
-
-
-
-def run_validation_stage(data, train_key, val_key, title):
-    """Run a validation stage for the specified training and validation datasets."""
-    y_train = data[train_key]["revenue"]
-    y_val = data[val_key]["revenue"]
-    history = pd.concat([y_train, y_val], ignore_index=True)
-
-    result = run_all_baseline(history, y_val, y_train)
-    return result, y_train, y_val
-
-def build_selection_criteria(result_23, result_24):
-    """Build selection criteria based on validation réults from two stages"""
-    df = pd.DataFrame({"Baseline": result_23["Baseline"]})
-
-    mae_1, mae_2 = result_23["MAE"].values, result_24["MAE"].values
-    mase_1, mase_2 = result_23["MASE"].values, result_24["MASE"].values
-
-    # avg_MAE
-    df["avg_MAE"] = (mae_1 + mae_2) / 2
-
-    # avg_MASE
-    df["avg_MASE"] = (mase_1 + mase_2) / 2
-
-    # avg_rank
-    rank_1 = pd.Series(mae_1).rank()
-    rank_2 = pd.Series(mae_2).rank()
-    df["avg_rank"] = ((rank_1 + rank_2) / 2).values
-
-    # max_MAE
-    df["max_MAE"] = pd.DataFrame({"a": mae_1, "b": mae_2}).max(axis=1)
-
-    # avg_MAE + std_MAE 
-    std_MAE = pd.DataFrame({"a": mae_1, "b": mae_2}).std(axis=1)
-    df["score_penalized"] = df["avg_MAE"] + std_MAE
-
-    return df
-
-
-def evaluate_criteria_on_test(criteria_df, test_result_df):
-    """Evaluate the selection criteria on the test dataset."""
-    test_lookup = test_result_df.set_index("Baseline")
-    criteria_cols = ["avg_MAE", "avg_MASE", "avg_rank", "max_MAE", "score_penalized"]
-
-    rows = []
-    for col in criteria_cols:
-        chosen = criteria_df.loc[criteria_df[col].idxmin(), "Baseline"]
-        test_row = test_lookup.loc[chosen]
-        rows.append({
-            "Standard": col,
-            "Model": chosen,
-            "MAE": test_row["MAE"],
-            "MASE": test_row["MASE"],
-        })
-    return pd.DataFrame(rows)
-
 if __name__ == "__main__":
     data = load_dataset()
+
     output_dir = BASE_DIR / "outputs" / "baseline"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    result_23, y_train_1, y_val_1 = run_validation_stage(
-        data, "train_2022", "val_2023", "train(2019-2022)|val(2023)"
+    y_train_2022 = data["train_2022"]["revenue"]
+    y_val_2023 = data["val_2023"]["revenue"]
+
+    history_2023 = pd.concat(
+        [y_train_2022, y_val_2023],
+        ignore_index=True
     )
-    result_24, y_train_2, y_val_2 = run_validation_stage(
-        data, "train_2023", "val_2024", "train(2019-2023)|val(2024)"
+
+    result_23 = run_all_baseline(
+        history_2023,
+        y_val_2023
+    )
+
+    best_row = select_best_baseline(result_23)
+
+    selected_model = best_row["Baseline"]
+    selected_model_func = build_models()[selected_model]
+
+    print("\nSelected baseline from Val2023:")
+    print(best_row)
+
+    y_train_2023 = data["train_2023"]["revenue"]
+    y_val_2024 = data["val_2024"]["revenue"]
+
+    result_24 = evaluate_selected_baseline(
+        selected_model,
+        selected_model_func,
+        y_train_2023,
+        y_val_2024
+    )
+
+    y_train_2024 = pd.concat(
+        [
+            y_train_2023,
+            y_val_2024
+        ],
+        ignore_index=True
     )
 
     test = data["test_2025"]
-    y_test_25 = test["revenue"]
+    y_test_2025 = test["revenue"]
 
-    his_for_pred = pd.concat([y_train_2, y_val_2, y_test_25], ignore_index=True)  
-    y_train_for_scale = pd.concat([y_train_2, y_val_2], ignore_index=True)               
-
-    result_25 = run_all_baseline(his_for_pred, y_test_25, y_train_for_scale)
-
-    criteria_df = build_selection_criteria(result_23, result_24)
-    verification_df = evaluate_criteria_on_test(criteria_df, result_25)
-
-    selected_model = verification_df["Model"].mode().iloc[0]
-    selected_model_func = build_models()[selected_model]
-
-    y_pred_25 = prediction(
+    result_25 = evaluate_selected_baseline(
+        selected_model,
         selected_model_func,
-        his_for_pred,
-        y_test_25,
+        y_train_2024,
+        y_test_2025
     )
+
+
+    history_2025 = pd.concat(
+        [
+            y_train_2024,
+            y_test_2025
+        ],
+        ignore_index=True
+    )
+
+    y_pred_2025 = prediction(
+        selected_model_func,
+        history_2025,
+        y_test_2025
+    )
+
+    # Business constraint giống SARIMA
+    y_pred_2025 = y_pred_2025.clip(lower=0)
+
     prediction_check = pd.DataFrame({
         "week_start": test["week_start"].values,
-        "actual": y_test_25.reset_index(drop=True),
-        "predicted": y_pred_25,
+        "actual": y_test_2025.reset_index(drop=True),
+        "predicted": y_pred_2025,
         "model": selected_model,
     })
+
+
+    summary = pd.DataFrame([
+        {
+            "split": "Val2023",
+            "model": selected_model,
+            "RMSE": best_row["RMSE"],
+            "MAE": best_row["MAE"],
+            "sMAPE": best_row["sMAPE"],
+        },
+        {
+            "split": "Val2024",
+            "model": selected_model,
+            "RMSE": result_24["RMSE"],
+            "MAE": result_24["MAE"],
+            "sMAPE": result_24["sMAPE"],
+        },
+        {
+            "split": "Test2025",
+            "model": selected_model,
+            "RMSE": result_25["RMSE"],
+            "MAE": result_25["MAE"],
+            "sMAPE": result_25["sMAPE"],
+        },
+    ])
+
+
     outputs = {
         "val_23_results.csv": result_23,
-        "val_24_results.csv": result_24,
-        "test_25_results.csv": result_25,
-        "selection_criteria.csv": criteria_df,
-        "selection_criteria_verification.csv": verification_df,
-        "prediction_check_25.csv": prediction_check
+        "baseline_summary.csv": summary,
+        "prediction_check_25.csv": prediction_check,
     }
+
     for filename, df in outputs.items():
-        df.to_csv(output_dir / filename, index=False)
+        df.to_csv(
+            output_dir / filename,
+            index=False
+        )
 
     print(f"\nSaved outputs to: {output_dir}")
