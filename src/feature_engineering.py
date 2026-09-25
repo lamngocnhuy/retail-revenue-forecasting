@@ -182,9 +182,9 @@ def add_outlier_flag(df: pd.DataFrame, series_name: str) -> pd.DataFrame:
                 print(f"  [Dynamic p90] {year}: {p90_hist:.2f} (from <{year})")
     
     # 3. Tạo feature từ dữ liệu quá khứ (t-1)
-    result["is_high_revenue_week"] = (result["lag_revenue_1"] > result["p90_threshold"]).astype(int)
+    result["is_lag_1_high_revenue"] = (result["lag_revenue_1"] > result["p90_threshold"]).astype(int)
     
-    n_flagged = result["is_high_revenue_week"].sum()
+    n_flagged = result["is_lag_1_high_revenue"].sum()
     print(f"  Outlier flag: {n_flagged} weeks flagged (lag-based, fold-specific p90)")
     
     # Cleanup cột tạm
@@ -286,7 +286,7 @@ def process_series(series_name: str) -> None:
     rolling_cols = [c for c in df.columns if c.startswith("rolling_")]
     time_cols    = ["week_of_year", "month", "quarter", "year", "week_sin", "week_cos", "trend_index"]
     covid_cols   = ["is_covid_period", "is_covid_shock"]
-    outlier_cols = ["is_high_revenue_week"]
+    outlier_cols = ["is_lag_1_high_revenue"]
     yoy_cols     = ["lag_52_ratio", "lag_4_ratio"]
 
     print(f"  Column groups:"
