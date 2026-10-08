@@ -1,0 +1,3 @@
+series,period,model,MAE,RMSE,sMAPE,WAPE,n_rows
+total,test2025,SARIMA,573.5839,752.8173,17.1784,16.9027,52
+total,test2025,XGBoost,573.8182,747.325,17.1829,16.9096,52

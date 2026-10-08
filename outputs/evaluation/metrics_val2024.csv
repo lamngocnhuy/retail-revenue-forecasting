@@ -1,0 +1,3 @@
+series,period,model,MAE,RMSE,sMAPE,WAPE,n_rows
+total,val2024,SARIMA,522.8493,644.6857,15.4818,15.5695,53
+total,val2024,XGBoost,539.5447,645.9723,15.97,16.0666,53

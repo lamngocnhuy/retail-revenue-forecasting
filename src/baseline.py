@@ -12,12 +12,14 @@ such as MAE, RMSE, and sMAPE.
 import pandas as pd
 import numpy as np
 from pathlib import Path
-
+import argparse
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from tqdm import tqdm
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_PATH = BASE_DIR / "data" / "processed"
+SERIES_ALL = ["total", "online", "store", "mobile"]
+STABILITY_WARN = 1.5
 
 def load_dataset():
     files = {
@@ -32,6 +34,49 @@ def load_dataset():
         name: pd.read_csv(DATA_PATH / file)
         for name, file in files.items()
     }
+    return data
+
+def load_series_dataset(series_name):
+    name = series_name.lower()
+    if name == "total":
+        data = load_dataset()
+    elif name in ("online", "store", "mobile"):
+        channel_df = pd.read_csv(DATA_PATH / "weekly_channel.csv", parse_dates=["week_start"])
+        total_df = pd.read_csv(DATA_PATH / "weekly_total.csv", parse_dates=["week_start"])
+        channel_df = channel_df[channel_df["channel"].str.lower() == name].copy()
+
+        channel_df = channel_df.merge(
+            total_df[["week_start", "split_year"]],
+            on="week_start",
+            how="left"
+        )
+
+        channel_df = channel_df.sort_values("week_start").reset_index(drop=True)
+
+        data = {
+            "train_2022": channel_df[channel_df["split_year"] <= 2022].copy(),
+            "val_2023": channel_df[channel_df["split_year"] == 2023].copy(),
+            "train_2023": channel_df[channel_df["split_year"] <= 2023].copy(),
+            "val_2024": channel_df[channel_df["split_year"] == 2024].copy(),
+            "test_2025": channel_df[channel_df["split_year"] == 2025].copy(),
+        }
+
+    else:
+        raise ValueError(f"Unknown series: {series_name}")
+
+    expected = {
+        "train_2022": 209,
+        "val_2023": 52,
+        "train_2023": 261,
+        "val_2024": 53,
+        "test_2025": 52,
+    }
+
+    for key, n in expected.items():
+        assert len(data[key]) == n, (
+            f"{series_name} - {key}: {len(data[key])} weeks, expected {n}"
+        )
+
     return data
 
 def naive_baseline(dt):
@@ -195,8 +240,25 @@ def run_all_baseline(history, y_true):
         results.append(run_baseline(name, model, history, y_true))
  
     return pd.DataFrame(results)
-if __name__ == "__main__":
-    data = load_dataset()
+
+
+def save_forecast( series_name, period, model_name, week_start, y_true, y_pred, output_dir):
+    """ Save the forecast results to a CSV file."""
+    y_true = y_true.reset_index(drop=True)
+    y_pred = y_pred.reset_index(drop=True)
+
+    out = pd.DataFrame({
+        "week_start": pd.Series(week_start).reset_index(drop=True),
+        "actual": y_true,
+        "baseline_forecast": y_pred,
+        "residual": y_true - y_pred,
+        "model": model_name,
+    })
+    out.to_csv( output_dir / f"forecast_{period}_{series_name}.csv", index=False)
+
+def run_baseline_pipeline(series_name):
+    """Run the baseline forecasting pipeline for a given series."""
+    data = load_series_dataset(series_name)
 
     output_dir = BASE_DIR / "outputs" / "baseline"
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -222,6 +284,12 @@ if __name__ == "__main__":
     print("\nSelected baseline from Val2023:")
     print(best_row)
 
+    y_pred_2023 = prediction(
+        selected_model_func,
+        history_2023,
+        y_val_2023
+    ).clip(lower=0)
+
     y_train_2023 = data["train_2023"]["revenue"]
     y_val_2024 = data["val_2024"]["revenue"]
 
@@ -232,11 +300,22 @@ if __name__ == "__main__":
         y_val_2024
     )
 
+    history_2024 = pd.concat(
+        [y_train_2023, y_val_2024],
+        ignore_index=True
+    )
+
+    y_pred_2024 = prediction(
+        selected_model_func,
+        history_2024,
+        y_val_2024
+    ).clip(lower=0)
+
+    stability_ratio = result_24["RMSE"] / best_row["RMSE"]
+    stability_flag = "WARN" if stability_ratio > STABILITY_WARN else "OK"
+
     y_train_2024 = pd.concat(
-        [
-            y_train_2023,
-            y_val_2024
-        ],
+        [y_train_2023, y_val_2024],
         ignore_index=True
     )
 
@@ -250,12 +329,8 @@ if __name__ == "__main__":
         y_test_2025
     )
 
-
     history_2025 = pd.concat(
-        [
-            y_train_2024,
-            y_test_2025
-        ],
+        [y_train_2024, y_test_2025],
         ignore_index=True
     )
 
@@ -274,7 +349,6 @@ if __name__ == "__main__":
         "predicted": y_pred_2025,
         "model": selected_model,
     })
-
 
     summary = pd.DataFrame([
         {
@@ -300,17 +374,100 @@ if __name__ == "__main__":
         },
     ])
 
+    save_forecast(
+        series_name,
+        "val2023",
+        selected_model,
+        data["val_2023"]["week_start"].values,
+        y_val_2023,
+        y_pred_2023,
+        output_dir
+    )
 
-    outputs = {
-        "val_23_results.csv": result_23,
-        "baseline_summary.csv": summary,
-        "prediction_check_25.csv": prediction_check,
+    save_forecast(
+        series_name,
+        "val2024",
+        selected_model,
+        data["val_2024"]["week_start"].values,
+        y_val_2024,
+        y_pred_2024,
+        output_dir
+    )
+
+    save_forecast(
+        series_name,
+        "test2025",
+        selected_model,
+        data["test_2025"]["week_start"].values,
+        y_test_2025,
+        y_pred_2025,
+        output_dir
+    )
+
+    result_23.to_csv(
+        output_dir / f"val_23_results_{series_name}.csv",
+        index=False
+    )
+
+    summary.to_csv(
+        output_dir / f"baseline_summary_{series_name}.csv",
+        index=False
+    )
+
+    prediction_check.to_csv(
+        output_dir / f"prediction_check_25_{series_name}.csv",
+        index=False
+    )
+
+    print(
+        f"\n[{series_name.upper()}] "
+        f"Selected={selected_model} | "
+        f"RMSE2023={best_row['RMSE']:.2f} | "
+        f"RMSE2024={result_24['RMSE']:.2f} | "
+        f"Stability={stability_ratio:.2f} ({stability_flag}) | "
+        f"RMSE2025={result_25['RMSE']:.2f}"
+    )
+
+    return {
+        "series": series_name,
+        "selected_baseline": selected_model,
+        "RMSE_2023": best_row["RMSE"],
+        "MAE_2023": best_row["MAE"],
+        "sMAPE_2023": best_row["sMAPE"],
+        "RMSE_2024": result_24["RMSE"],
+        "MAE_2024": result_24["MAE"],
+        "sMAPE_2024": result_24["sMAPE"],
+        "stability_ratio_rmse": round(stability_ratio, 4),
+        "stability_flag": stability_flag,
+        "RMSE_test2025": result_25["RMSE"],
+        "MAE_test2025": result_25["MAE"],
+        "sMAPE_test2025": result_25["sMAPE"],
     }
 
-    for filename, df in outputs.items():
-        df.to_csv(
-            output_dir / filename,
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--series",
+        choices=SERIES_ALL + ["all"],
+        default="total"
+    )
+    args = parser.parse_args()
+
+    series_list = SERIES_ALL if args.series == "all" else [args.series]
+
+    summaries = [
+        run_baseline_pipeline(series_name)
+        for series_name in series_list
+    ]
+
+    if len(summaries) > 1:
+        output_dir = BASE_DIR / "outputs" / "baseline"
+        summary_all = pd.DataFrame(summaries)
+        summary_all.to_csv(
+            output_dir / "baseline_summary_all_series.csv",
             index=False
         )
 
-    print(f"\nSaved outputs to: {output_dir}")
+        print("\nBaseline summary all series:")
+        print(summary_all.to_string(index=False))

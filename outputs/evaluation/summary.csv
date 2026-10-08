@@ -1,0 +1,4 @@
+period,series,model_count,mean_mae,mean_rmse,mean_smape,mean_wape
+test2025,total,2,573.70105,750.07115,17.18065,16.90615
+val2023,total,2,559.83875,669.4131,16.697499999999998,16.2729
+val2024,total,2,531.197,645.329,15.7259,15.81805
