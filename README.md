@@ -1,196 +1,745 @@
-# TÀI LIỆU KỸ THUẬT: MÔ TẢ VÀ HƯỚNG DẪN PIPELINE TIỀN XỬ LÝ DỮ LIỆU (`preprocess.py`)
+# Retail Revenue Forecasting — Hướng dẫn thực thi hoàn chỉnh
 
-## 0. HƯỚNG DẪN CHẠY PIPELINE (QUAN TRỌNG)
+## 1. Bức tranh tổng
 
-Thư mục `data/processed/` trên Git chỉ giữ lại file `.gitkeep` để duy trì cấu trúc folder. Toàn bộ các file CSV thành phẩm và báo cáo JSON sẽ được **sinh ra tự động khi bạn chạy code**.
+Dự án này xây dựng một pipeline forecast doanh thu bán lẻ theo tuần cho bốn chuỗi:
 
-### Điều kiện tiên quyết:
-* Máy đã cài đặt Python 3.9+ và các thư viện cần thiết (`pandas`, `numpy`).
-* Đảm bảo đã có file dữ liệu thô **`retailhive_10k.csv`** nằm trong thư mục  `data/raw/retailhive_10k.csv`
+- `total`: doanh thu toàn hệ thống;
+- `online`: doanh thu kênh Online;
+- `store`: doanh thu kênh Store;
+- `mobile`: doanh thu kênh Mobile.
 
+Mục tiêu cuối cùng không chỉ là mô hình hóa prediction, mà còn cần kiểm tra:
 
-### Các bước thực thi:
+1. dữ liệu thô hợp lệ và không bị thay đổi;
+2. doanh thu được gom theo tuần một cách ổn định;
+3. train, validation và test được tách theo thời gian;
+4. các feature không dùng dữ liệu tương lai;
+5. SARIMA, XGBoost và baseline được đánh giá cùng một protocol;
+6. Hybrid SARIMA–XGBoost được xây dựng từ SARIMA residual;
+7. kết quả được kiểm tra lại trước khi báo cáo.
 
-**Bước 1: Mở Terminal/CMD tại thư mục gốc của project.**
+Các file hiện có trong workspace gồm:
 
-**Bước 2: Chạy câu lệnh xử lý dữ liệu:**
-```bash
-python preprocess.py
+- `src/preprocess.py`: tiền xử lý và tách thời gian;
+- `src/feature_engineering.py`: tạo feature matrix;
+- `src/train_sarima.py`: câu lệnh SARIMA, tuning và residual diagnostics;
+- `src/train_xgboost.py`: XGBoost tuning, Val2023/Val2024 và final evaluation;
+- `src/baseline.py`: các baseline;
+- `src/eda_omnichannel.py`: EDA và visualization;
+- `data/processed/`: dataset weekly và split;
+- `data/features/`: feature matrix;
+- `outputs/sarima/`: SARIMA forecast và tuning;
+- `outputs/xgboost/`: XGBoost forecast, tuning và comparison;
+- `outputs/baseline/`: kết quả baseline, nếu đã sinh;
+- `outputs/evaluation/`: kết quả unified evaluation, nếu đã sinh;
+- `notebooks/`: notebook EDA, SARIMA, XGBoost và các kiểm tra.
+
+> **Lưu ý quan trọng:** hiện tại workspace có mã nguồn của preprocessing, feature engineering, SARIMA, XGBoost và baseline. Chưa có module Hybrid hoàn chỉnh và chưa có unified evaluation module được kết nối toàn bộ. Các lệnh dưới đây chỉ định hướng đúng thứ tự thực thi; không nên chạy các lệnh được ghi dưới đây nếu file Hybrid chưa được tạo.
+
+---
+
+## 2. Định nghĩa target và đơn vị dữ liệu
+
+Mỗi giao dịch có các trường:
+
+- `transaction_id`;
+- `date`;
+- `channel`;
+- `region`;
+- `quantity`;
+- `price`;
+- `revenue`;
+- `product_title`;
+- `rating`;
+- `customer_id`.
+
+Target theo tuần được định nghĩa:
+
+$$
+Y_t = \sum_{i \in t} revenue_i
+$$
+
+với `t` là một tuần Monday-based.
+
+| Chuỗi | Nguồn | Đơn vị |
+|---|---|---|
+| `total` | `weekly_total.csv` | Tổng hệ thống |
+| `online` | `weekly_channel.csv` | Kênh Online |
+| `store` | `weekly_channel.csv` | Kênh Store |
+| `mobile` | `weekly_channel.csv` | Kênh Mobile |
+
+`total` không phải là một kênh riêng; nó là tổng doanh thu của ba kênh.
+
+---
+
+## 3. Trạng thái các bước hiện có
+
+| Bước | Trạng thái | Đầu ra |
+|---|---|---|
+| Data profiling | Đã có | báo cáo chất lượng | 
+| Transaction validation | Đã có | `data/processed/cleaned_transactions.csv` |
+| Weekly aggregation | Đã có | `weekly_total.csv`, `weekly_channel.csv` |
+| Missing week handling | Đã có | rows missing-week nếu có |
+| Chronological split | Đã có | 5 split CSV |
+| Revenue conservation | Đã kiểm tra | `preprocessing_report.json` |
+| Feature engineering | Đã có | `data/features/features_*.csv` |
+| SARIMA | Đã có | forecast, tuning, residual diagnostics |
+| XGBoost | Đã có | tuning, forecast, summary |
+| Baseline | Đã có | `outputs/baseline/` |
+| Hybrid SARIMA–XGBoost | Chưa có module đầy đủ | cần tạo theo bước 8 |
+| Unified evaluation | Chưa có | cần tạo theo bước 9 |
+
+---
+
+## 4. Bước 1 — Kiểm tra và tiền xử lý dữ liệu
+
+### 4.1 Mục tiêu
+
+Pipeline phải biến dữ liệu thô thành:
+
+- một bảng transaction sạch;
+- một bảng weekly total;
+- một bảng weekly channel;
+- các split theo thời gian;
+- một báo cáo chất lượng;
+- một báo cáo validation.
+
+### 4.2 Chạy
+
+Từ thư mục gốc:
+
+```powershell
+python src/preprocess.py
 ```
 
-(Lưu ý: Nếu file dữ liệu thô hoặc thư mục đầu ra nằm ở vị trí khác, có thể truyền tham số tùy chỉnh:)
-```bash
-python preprocess.py --input data/raw/retailhive_10k.csv --output-dir data/processed
+Tùy chỉnh input/output:
+
+```powershell
+python src/preprocess.py `
+  --input data/raw/retailhive_10k.csv `
+  --output-dir data/processed
 ```
 
-## 1. TỔNG QUAN LUỒNG DỮ LIỆU (DATA FLOW)
+### 4.3 Thực thi theo thứ tự
 
-Pipeline tiếp nhận dữ liệu đầu vào `retailhive_10k.csv`, thực hiện kiểm tra chất lượng, biến đổi thời gian, nén dữ liệu theo tuần, phân tập Train/Val/Test chống rò rỉ (Data Leakage) và xuất ra các file thành phẩm kèm báo cáo JSON.
+1. `load_transactions()`:
+   - chuẩn hóa tên cột;
+   - chuyển `date` sang datetime;
+   - chuyển numeric field sang numeric;
+   - kiểm tra missing columns;
+   - kiểm tra invalid category.
+2. `build_quality_report()`:
+   - đếm số dòng;
+   - đếm missing values;
+   - đếm duplicate rows và transaction IDs;
+   - kiểm tra invalid date;
+   - kiểm tra channel/region;
+   - kiểm tra negative/zero quantity, price, revenue;
+   - so sánh `revenue` với `quantity × price`.
+3. `validate_transactions()`:
+   - bắt buộc `date`, `revenue`, `channel`;
+   - date phải hợp lệ;
+   - channel và region nằm trong danh sách được chấp nhận;
+   - numeric fields không bị thiếu.
+4. `add_week_columns()`:
+   - `week_start = date - weekday`;
+   - gán `split_year`;
+   - tạo COVID flags;
+   - tạo `covid_phase`.
+5. `aggregate_weekly()`:
+   - nhóm tổng doanh thu theo week;
+   - nhóm doanh thu theo week + channel;
+   - giữ số công transaction;
+   - giữ first/last transaction date.
+6. `add_week_intervention_flags()`:
+   - không chỉnh sửa revenue;
+   - chỉ đánh dấu calendar period.
+7. `aggregate_weekly()` sinh missing week.
+8. `split_by_time()` tách train/validation/test.
+9. `validate_outputs()` kiểm tra conservation, chronology và split ranges.
+10. `save_outputs()` ghi file CSV và JSON metadata.
 
-[ Dữ liệu thô CSV ]
-        │
-        ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 1. Load & Ép kiểu tối ưu (load_transactions)               │
-│ 2. Thu thập báo cáo chất lượng (build_quality_report)       │
-│ 3. Kiểm tra chốt chặn dữ liệu thô (validate_transactions)   │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 4. Tạo cờ thời gian & Gán nhãn COVID (add_week_columns)     │
-│ 5. Gom nhóm theo tuần & Điền tuần khuyết (aggregate_weekly) │
-│ 6. Chia tập Train/Val/Test chống rò rỉ (split_by_time)      │
-└────────────────────────────┬────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 7. Thẩm định bán thành phẩm (validate_outputs)             │
-│ 8. Xuất file CSVs & Báo cáo Metadata (save_outputs)        │
-└─────────────────────────────────────────────────────────────┘
+### 4.4 File đầu ra
 
-## 2. CHI TIẾT LOGIC XỬ LÝ NGHỆ THUẬT (10 BƯỚC THỰC THI)
+```text
+data/processed/cleaned_transactions.csv
+data/processed/weekly_total.csv
+data/processed/weekly_channel.csv
+data/processed/train_2019_2022.csv
+data/processed/validation_2023.csv
+data/processed/train_2019_2023.csv
+data/processed/validation_2024.csv
+data/processed/test_2025.csv
+data/processed/preprocessing_report.json
+```
 
-### Phần 1: Khai Báo Cấu Trúc & Hằng Số Hệ Thống
+### 4.5 Split hiện có
 
-- **Các thuộc tính bắt buộc (`REQUIRED_COLUMNS`):** `transaction_id`, `date`, `revenue`, `quantity`, `channel`.
-- **Kênh bán hàng hợp lệ (`EXPECTED_CHANNELS`):** `Mobile`, `Online`, `Store`.
-- **Cấu hình chia tập (`SplitConfig`):**
-  - `validation_1_year = 2023`
-  - `validation_2_year = 2024`
-  - `test_year = 2025`
-- **Cấu hình dịch bệnh (`CovidConfig`):**
-  - `period_start = 2020-03-01` (Bắt đầu giai đoạn dịch)
-  - `shock_end = 2020-06-30` (Kết thúc giai đoạn sốc ban đầu)
-  - `period_end = 2021-12-31` (Kết thúc toàn bộ giai đoạn ảnh hưởng)
+| Tập | Năm | Số tuần | Dùng |
+|---|---:|---:|---|
+| `train_2019_2022` | 2019–2022 | 209 | Training Val2023 |
+| `validation_2023` | 2023 | 52 | Val2023 |
+| `train_2019_2023` | 2019–2023 | 261 | Training Val2024 |
+| `validation_2024` | 2024 | 53 | Val2024 |
+| `test_2025` | 2025 | 52 | Final Test |
 
-### Phần 2: Đọc Dữ Liệu (`load_transactions`)
+### 4.6 Revenue conservation
 
-- Tối ưu bộ nhớ bằng cách ép kiểu dữ liệu ngay khi đọc:
-  - `date` → `datetime64[ns]`
-  - `channel` → `category` (Giảm dung lượng bộ nhớ RAM)
-  - `revenue`, `quantity` → `float64`
-- Sắp xếp lại dữ liệu tăng dần theo trục thời gian `date`.
+Phải kiểm tra:
 
-### Phần 3 & 4: Thu Thập & Kiểm Soát Chất Lượng Dữ Liệu Thô
+$$
+\left|\sum_t Y_t - \sum_i revenue_i\right| \le 10^{-6}
+$$
 
-- **`build_quality_report`:** Thống kê tổng số dòng, ngày bắt đầu/kết thúc, số lượng giá trị bị khuyết (`null_counts`) và doanh thu âm/bằng 0 (`non_positive_revenue_count`).
-- **`validate_transactions` (Ngắt luồng nếu dữ liệu sai):** Tự động văng lỗi `ValueError` và dừng pipeline ngay lập tức nếu phát hiện:
-  - Khuyết bất kỳ trường bắt buộc nào.
-  - Tồn tại `revenue <= 0` hoặc `quantity <= 0`.
-  - Xuất hiện kênh bán hàng lạ ngoài danh sách `EXPECTED_CHANNELS`.
+Nếu không thỏa mãn, pipeline phải dừng thay vì tạo feature hoặc model sai.
 
-### Phần 5: Báo Cáo Chất Lượng Thực Tế
+### 4.7 Bức tranh tổng sau preprocessing
 
-- Đã chạy thực tế trên file `retailhive_10k.csv`:
-  - **Tổng số giao dịch:** 12,000 dòng.
-  - **Số dòng khuyết / Lỗi:** 0 dòng (`100%` dữ liệu đạt chuẩn).
-  - **Khoảng thời gian:** Từ `2019-01-01` đến `2025-12-31`.
+Sau tiền xử lý, cần tạo tổng hợp visual:
 
-### Phần 6: Biến Đổi Cột Thời Gian & Gán Nhãn COVID (`add_week_columns`)
+- doanh thu tuần Total;
+- doanh thu tuần theo kênh;
+- MA-8 của Total và từng kênh;
+- trend theo năm;
+- seasonal decomposition;
+- heatmap year × month;
+- boxplot và KDE của doanh thu theo kênh;
+- outlier IQR;
+- split-boundary biểu đồ;
+- COVID period marker.
 
-1. **Chuẩn hóa tuần về Thứ Hai (`week_start`):**
-   - Lùi ngày giao dịch về ngày Thứ Hai gần nhất của tuần đó.
-   - *Công thức:* `week_start = date - timedelta(days = weekday)`.
+File visualization hiện có trong EDA pipeline tại `src/eda_omnichannel.py`; phần output nằm trong thư mục `notebooks/eda_outputs` hoặc thư mục output do script xác định.
 
-2. **Đánh nhãn phân loại giai đoạn dịch (`covid_phase`):**
-   - `pre_covid`: Ngày giao dịch `< 2020-03-01`.
-   - `covid_shock`: Ngày nằm trong khoảng `2020-03-01 → 2020-06-30`.
-   - `covid_adaptation`: Ngày nằm trong khoảng `2020-07-01 → 2021-12-31`.
-   - `post_covid`: Ngày `> 2021-12-31`.
-  
-### Phần 7: Gom Nhóm Thời Gian Theo Tuần (`aggregate_weekly`)
+---
 
-Dữ liệu thô **12,000 dòng giao dịch** được nén thành 2 bảng tổng hợp:
+## 5. Bước 2 — Feature engineering
 
-- **`weekly_total`:** Gom theo `week_start`.
-  - Mỗi tuần là **1 dòng duy nhất** đại diện cho toàn hệ thống.
-  - Tính:
-    - `sum(revenue)`
-    - `sum(quantity)`
-    - `nunique(transaction_id)`
+### 5.1 Chạy
 
-- **`weekly_channel`:** Gom theo `[week_start, channel]`.
-  - Mỗi tuần có **3 dòng** đại diện cho 3 kênh bán hàng riêng biệt:
-    - `Mobile`
-    - `Online`
-    - `Store`
+```powershell
+python src/feature_engineering.py --series all
+```
 
-- **Cờ COVID ở cấp độ tuần:**
-  - Nếu tuần có **bất kỳ ngày nào** dính vào khoảng dịch, cả tuần đó được tính:
-    - `is_covid_period = True`
+Hoặc chạy cho một chuỗi:
 
-### Phần 8: Điền Tuần Khuyết & Chia Tập Dữ Liệu Chống Rò Rỉ
+```powershell
+python src/feature_engineering.py --series total
+python src/feature_engineering.py --series online
+python src/feature_engineering.py --series store
+python src/feature_engineering.py --series mobile
+```
 
-#### Chính sách điền tuần khuyết (Reindex Missing Weeks)
+### 5.2 Feature groups
 
-- Tạo trục thời gian chuẩn 7 ngày/tuần bằng:
-  - `pd.date_range(freq="7D")`
-- Nếu có tuần bị thiếu trong thực tế, chèn tuần đó vào với:
-  - `revenue = NaN`
-  - `transaction_count = 0`
-  - `week_has_transactions = False`
-- Mục đích: **Tránh làm đứt đoạn chuỗi thời gian.**
+| Group | Cách tạo |
+|---|---|
+| Lag | `lag_revenue_1` đến `lag_revenue_52` |
+| Rolling | mean/std/min/max với windows 4, 8, 12, 26 |
+| Time | week/month/quarter/year, sine/cosine, trend index |
+| COVID | `is_covid_period`, `is_covid_shock` |
+| Outlier | `is_lag_1_high_revenue` từ lag history |
+| YoY/MoM | `lag_52_ratio`, `lag_4_ratio` |
 
-#### Chiến lược chia tập kiểm thử 2 vòng (Two-Round Validation Strategy)
+### 5.3 Anti-leakage rules
 
-- **Vòng 1 (Val 1):**
-  - Train: `2019–2022` → **209 tuần**
-  - Validation: `2023` → **52 tuần**
+Các feature phải thỏa mãn:
 
-- **Vòng 2 (Val 2):**
-  - Train: `2019–2023` → **261 tuần**
-  - Validation: `2024` → **53 tuần**
+- lag dùng target trước tại `$t-k$`;
+- rolling window chỉ lấy history trước `$t$`;
+- outlier threshold được tính từ history;
+- `target_revenue` không được đưa into feature;
+- `split_year` không được dùng làm feature;
+- feature Test2025 không được dùng để lập bệnh training;
+- Target perturbation ở tuần $t$ không làm thay đổi feature tại tuần $t$.
 
-- **Test Set:**
-  - Giữ riêng toàn bộ năm `2025` → **52 tuần**
-  - Dùng để đánh giá độc lập cuối cùng.
+### 5.4 File đầu ra
 
-### Phần 9: Thẩm Định Bán Thành Phẩm (`validate_outputs`)
+```text
+data/features/features_total.csv
+data/features/features_online.csv
+data/features/features_store.csv
+data/features/features_mobile.csv
+```
 
-Thực hiện **4 chốt kiểm tra chất lượng (KCS)** trước khi ghi đĩa:
+Mỗi file phải có:
 
-1. **Bảo toàn doanh thu (Revenue Conservation):**
-   - `Absolute Difference` giữa tổng doanh thu giao dịch thô và tổng doanh thu sau gom nhóm phải:
-     - `≤ 10^-6`
-   - Thực tế:
-     - `= 0.0`
+- `week_start`;
+- `target_revenue`;
+- `split_year`;
+- `is_covid_period`;
+- `is_covid_shock`;
+- feature history;
+- metadata không dùng dữ liệu tương lai.
 
-2. **Trục thời gian (Chronology):**
-   - Bảng tuần phải đảm bảo:
-     - Tăng dần liên tục (`is_monotonic_increasing`)
-     - Không chứa tuần bị trùng lặp (`duplicated`)
+### 5.5 SARIMA residual không được dùng trước khi tạo Hybrid
 
-3. **Đủ danh mục (Categories):**
-   - Bảng theo kênh phải chứa đầy đủ 3 kênh:
-     - `Mobile`
-     - `Online`
-     - `Store`
+Hiện tại, feature engineering intentionally không bao gồm SARIMA residual. Việc nối residual vào feature cần được thực hiện sau khi SARIMA forecast phù hợp và sau khi xác nhận:
 
-4. **Tính toàn vẹn các tập Splits:**
-   - Đảm bảo từng tập con trong **5 tập chia** cũng tuân thủ đúng chiều thời gian.
+- residual target có cùng week_start với feature matrix;
+- residual target chỉ lấy từ training period;
+- `SARIMA residual validation` không được dùng trong training;
+- residual Test2025 không được dùng cho tuning.
 
-### Phần 10: Xuất File Ra Ổ Đĩa & Đóng Gói Pipeline (`save_outputs` & `run_pipeline`)
+---
 
-#### Định dạng file CSV xuất ra (`data/processed/`)
+## 6. Bước 3 — Baseline
 
-- `cleaned_transactions.csv` → **12,000 dòng**
-- `weekly_total.csv` → **366 dòng**
-- `weekly_channel.csv` → **1,098 dòng**
+Baseline nên được chạy sau khi dataset đã được sätt chuẩn, trước khi so sánh model chính.
 
-#### Các file Splits
+Chạy:
 
-- `train_2019_2022.csv`
-- `validation_2023.csv`
-- `train_2019_2023.csv`
-- `validation_2024.csv`
-- `test_2025.csv`
+```powershell
+python src/baseline.py
+```
 
-#### Báo cáo Metadata (`preprocessing_report.json`)
+Các baseline gồm:
 
-Lưu toàn bộ siêu dữ liệu của quá trình tiền xử lý:
+- Naive: $\\hat Y_t = Y_{t-1}$;
+- Moving average: average last $w$ weeks;
+- Seasonal naive: same week previous year;
+- Drift: last value + average historical drift;
+- Holt-Winters: trend/seasonal exponential smoothing.
 
-- Cấu hình chia `split`
-- Quy định COVID
-- Báo cáo chất lượng đầu vào `quality_report`
-- Báo cáo thẩm định đầu ra `validation_report`
+Baseline phải dùng đúng training history. Không được dùng actual của validation period để tính forecast trước khi cấu hình baseline.
+
+### 6.1 Kết quả cần lưu
+
+```text
+outputs/baseline/val_23_results.csv
+outputs/baseline/baseline_summary.csv
+outputs/baseline/prediction_check_25.csv
+```
+
+### 6.2 Metrics
+
+Baseline nên dùng cùng MAE, RMSE, sMAPE, WAPE với SARIMA/XGBoost.
+
+---
+
+## 7. Bước 4 — SARIMA
+
+### 7.1 Chạy
+
+```powershell
+python src/train_sarima.py --series all
+```
+
+Hoặc chạy một chuỗi:
+
+```powershell
+python src/train_sarima.py --series total
+python src/train_sarima.py --series online
+python src/train_sarima.py --series store
+python src/train_sarima.py --series mobile
+```
+
+### 7.2 Thứ tự
+
+1. Load weekly series.
+2. Tạo candidate từ auto-ARIMA và manual AR/MA.
+3. Fit candidate trên train 2019–2022.
+4. Forecast Val2023.
+5. Chọn candidate theo RMSE Val2023.
+6. Tính residual diagnostics.
+7. Refits trên 2019–2023 cho Val2024 stability.
+8. Refits trên 2019–2024 cho Test2025 final evaluation.
+9. Lưu forecast, tuning và residual diagnostics.
+
+### 7.3 Lưu file
+
+```text
+outputs/sarima/forecast_val2023_{series}.csv
+outputs/sarima/forecast_val2024_{series}.csv
+outputs/sarima/forecast_test2025_{series}.csv
+tuning_results_{series}.csv
+sarima_summary_all_series.csv
+residual_diagnostics_{series}.txt
+```
+
+### 7.4 Residual definition
+
+$$
+R_t^{SARIMA} = Y_t - \hat Y_t^{SARIMA}
+$$
+
+Residual này được dùng để:
+
+- kiểm tra residual behavior;
+- xác định autocorrelation;
+- tạo residual target cho Hybrid;
+- phần được lưu trong artifact SARIMA.
+
+Residual không được dùng để chọn model SARIMA khi có validation data nào; model selection chỉ dùng Val2023.
+
+---
+
+## 8. Bước 5 — XGBoost
+
+### 8.1 Chạy
+
+```powershell
+python src/train_xgboost.py --series all
+```
+
+Hoặc:
+
+```powershell
+python src/train_xgboost.py --series total --n-iter 60 --top-n 10
+```
+
+### 8.2 Tuning protocol
+
+Tuning được chạy trên `train_2019_2022` và dùng Val2023 để chọn model:
+
+- `n_estimators`;
+- `learning_rate`;
+- `max_depth`;
+- `min_child_weight`;
+- `subsample`;
+- `colsample_bytree`;
+- `reg_lambda`;
+- `reg_alpha`.
+
+### 8.3 Val2023
+
+1. Fit XGBoost trên train 2019–2022.
+2. Predict Val2023.
+3. Tính MAE, RMSE, sMAPE, WAPE.
+4. Không dùng Val2023 để chọn feature.
+
+### 8.4 Stability Val2024
+
+1. Refit trên train 2019–2023.
+2. Không retune.
+3. Predict Val2024.
+4. Tính stability ratio:
+
+$$
+StabilityRatio = \frac{RMSE_{2024}}{RMSE_{2023}}
+$$
+
+```text
+WARN  nếu StabilityRatio > 1.5
+OK    nếu StabilityRatio <= 1.5
+```
+
+### 8.5 Final Test2025
+
+Fit trên 2019–2024 và forecast Test2025 chỉ để final evaluation. Test2025 không được dùng trong tuning hoặc model selection.
+
+### 8.6 File đầu ra
+
+```text
+outputs/xgboost/forecast_val2023_{series}.csv
+outputs/xgboost/forecast_val2024_{series}.csv
+outputs/xgboost/forecast_test2025_{series}.csv
+outputs/xgboost/tuning_results_{series}.csv
+outputs/xgboost/best_params_{series}.json
+outputs/xgboost/feature_importance_{series}.csv
+outputs/xgboost/top_errors_{series}.csv
+outputs/xgboost/comparison_sarima_{series}.csv
+outputs/xgboost/xgb_summary_all_series.csv
+```
+
+### 8.7 Chứng minh output
+
+Mỗi forecast phải có:
+
+```text
+week_start, actual, xgb_forecast, residual
+```
+
+với:
+
+$$
+residual = actual - xgb\_forecast
+$$
+
+---
+
+## 9. Bước 6 — Hybrid SARIMA–XGBoost
+
+### 9.1 Ý tưởng
+
+XGBoost không được dùng để forecast trực tiếp doanh thu hoàn toàn. XGBoost được dùng để học correction trên SARIMA residual:
+
+$$
+\hat Y_t^{Hybrid} = \hat Y_t^{SARIMA} + \hat R_t^{XGBoost}
+$$
+
+Trong đó:
+
+- `SARIMA forecast` là base;
+- `XGBoost residual correction` là component bổ sung;
+- training residual là:
+
+$$
+R_t^{train} = Y_t - \hat Y_t^{SARIMA,train}
+$$
+
+### 9.2 Thứ tự training
+
+1. Fit SARIMA trên training history.
+2. Tạo forecast SARIMA trên cùng training history.
+3. Tạo residual target.
+4. Align residual target với feature matrix theo `week_start`.
+5. Tạo feature matrix historical-only.
+6. Fit XGBoost để predict residual.
+7. Combine SARIMA forecast và XGBoost correction.
+8. Evaluate trên validation period.
+
+### 9.3 Ràng buộc
+
+- Residual training chỉ lấy từ rows training.
+- Residual validation không được dùng trong training.
+- Residual Test2025 không được dùng cho tuning.
+- `XGBoost residual model` không được dùng để tạo SARIMA forecast.
+- Feature `week_start` phải khớp giữa SARIMA residual, feature matrix và actual.
+- Không được dùng `actual` của tuần hiện tại để tạo feature.
+- Không được dùng future residual trong feature matrix.
+
+### 9.4 Cách tạo SARIMA residual target
+
+Với mỗi series và training period:
+
+1. Fit SARIMA trên training history.
+2. Dự báo one-step-ahead trên cùng history.
+3. Tính residual:
+
+```text
+residual = actual - sarima_forecast
+```
+
+4. Lưu residual vào bảng:
+
+```text
+week_start, actual, sarima_forecast, residual, split_year
+```
+
+5. Join residual với feature matrix theo `week_start`.
+6. Chỉ giữ rows thuộc training period.
+
+### 9.5 Cách training XGBoost correction
+
+- Feature matrix của XGBoost dùng feature history;
+- target là SARIMA residual;
+- training period phải nằm trong training history;
+- model phải được fit Không dùng validation target;
+- khi forecasting validation, SARIMA forecast được lấy từ artifact, còn XGBoost predicts residual;
+- final Hybrid forecast = SARIMA forecast + residual prediction.
+
+### 9.6 Output Hybrid
+
+```text
+outputs/hybrid/forecast_val2023_{series}.csv
+outputs/hybrid/forecast_val2024_{series}.csv
+outputs/hybrid/forecast_test2025_{series}.csv
+outputs/hybrid/hybrid_summary_all_series.csv
+outputs/hybrid/residual_alignment_report.csv
+```
+
+Nếu module Hybrid chưa được tạo, các file trên là phần chưa hoàn tất.
+
+---
+
+## 10. Bước 7 — Unified evaluation
+
+Unified evaluation phải dùng cùng contract cho toàn bộ model.
+
+### 10.1 Model contract
+
+Mỗi model phải trả forecast theo schema giống nhau:
+
+```text
+series, period, week_start, actual, forecast, residual, model_name, training_end
+```
+
+### 10.2 Periods
+
+| Period | Training | Evaluation |
+|---|---|---|
+| Val2023 | 2019–2022 | 2023 |
+| Val2024 | 2019–2023 | 2024 |
+| Test2025 | 2019–2024 | 2025 |
+
+### 10.3 Metrics
+
+Tất cả model dùng:
+
+$$
+MAE = mean(|Y - \hat Y|)
+$$
+
+$$
+RMSE = sqrt(mean((Y - \hat Y)^2))
+$$
+
+$$
+SMAPE = 100 \times mean\left(\frac{2|Y-\hat Y|}{|Y|+|\hat Y|}\right)
+$$
+
+$$
+WAPE = 100 \times \frac{\sum |Y-\hat Y|}{\sum |Y|}
+$$
+
+### 10.4 Schema validation
+
+Trước khi metrics:
+
+1. forecast row count bằng actual row count;
+2. week_start khớp;
+3. không có duplicate week;
+4. không có missing week;
+5. actual khớp với feature matrix;
+6. residual = actual - forecast;
+7. model_name và period đều rõ;
+8. training_end không nằm sau evaluation period.
+
+### 10.5 Output
+
+```text
+outputs/evaluation/metrics_val2023.csv
+outputs/evaluation/metrics_val2024.csv
+outputs/evaluation/metrics_test2025.csv
+outputs/evaluation/comparison.csv
+outputs/evaluation/summary.csv
+outputs/evaluation/schema_validation.csv
+```
+
+### 10.6 Cột comparison
+
+```text
+series, period, model, MAE, RMSE, sMAPE, WAPE, n_rows
+```
+
+---
+
+## 11. Thứ tự chạy đầy đủ
+
+Từ thư mục gốc:
+
+```powershell
+python src/preprocess.py
+python src/feature_engineering.py --series all
+python src/eda_omnichannel.py
+python src/baseline.py
+python src/train_sarima.py --series all
+python src/train_xgboost.py --series all
+python src/hybrid.py --series all
+python src/evaluation_pipeline.py
+```
+
+Một số lệnh phía trên chỉ run khi source tương ứng đã tồn tại. Hiện tại không có `src/hybrid.py` và `src/evaluation_pipeline.py` trong workspace.
+
+### Thứ tự hợp lý của phần 2
+
+```text
+Preprocessing
+    -> weekly_total / weekly_channel / splits
+    -> Feature engineering
+    -> EDA / visualization
+    -> Baseline
+    -> SARIMA
+    -> XGBoost
+    -> SARIMA residual target
+    -> XGBoost residual correction
+    -> Hybrid forecast
+    -> Unified evaluation
+```
+
+---
+
+## 12. Cách xác minh trước khi kết thúc
+
+### 12.1 Preprocessing
+
+- revenue difference = 0;
+- 366 weekly row;
+- no duplicate week;
+- split chronology valid;
+- no invalid date;
+- no missing channel;
+- all split counts match expected.
+
+### 12.2 Feature
+
+- no current target in feature;
+- lag and rolling historical-only;
+- feature matrix rows aligned by week;
+- no leakage perturbation;
+- all four series have matching feature columns.
+
+### 12.3 SARIMA
+
+- selected model converged;
+- residual diagnostics computed;
+- Val2023 forecast and Val2024 background match split;
+- Test2025 only for final evaluation.
+
+### 12.4 XGBoost
+
+- tuning values saved;
+- best params match saved JSON;
+- Val2023 and Val2024 metrics match forecast files;
+- Test2025 not used for tuning;
+- residual equals actual minus forecast;
+- stability ratio computed correctly.
+
+### 12.5 Hybrid
+
+- SARIMA residual target align by week;
+- XGBoost trained on residual training only;
+- Hybrid formula used;
+- no validation or future leakage;
+- hybrid metrics compared with Baseline, SARIMA and XGBoost.
+
+### 12.6 Unified evaluation
+
+- all models use same columns;
+- all models use same actual rows;
+- same RMSE/MAE/sMAPE/WAPE formulas;
+- output generated by shared module;
+- no model can access future data.
+
+---
+
+## 13. Trạng thái hiện tại của repository
+
+| Area | Status |
+|---|---|
+| Data profiling && quality check | Đã hoàn tất |
+| Weekly aggregation | Đã hoàn tất |
+| COVID flags | Đã hoàn tất |
+| Revenue conservation | Đã xác nhận |
+| Chronological split | Đã hoàn tất |
+| Feature engineering | Đã có, SARIMA residual absent |
+| EDA visualization | Đã có |
+| Baseline | Đã có |
+| SARIMA | Đã có |
+| XGBoost | Đã có |
+| Hybrid SARIMA–XGBoost | Chưa có |
+| Unified evaluation | Chưa có |
+| Proposal | Không tìm thấy |
+
+> Tác giả phải không xem “đã có artifacts” đồng nghĩa là “đã hoàn tất pipeline”. Chỉ khi Hybrid residual target và unified evaluation được tạo, chạy và xác minh mới nên đánh giá toàn bộ pipeline là hoàn tất.
+
+---
+
+## 14. Checklist trước khi báo cáo hoàn tất
+
+- [ ] `python src/preprocess.py` chạy bình thường.
+- [ ] feature matrix sinh ra cho 4 chuỗi.
+- [ ] `python src/train_sarima.py --series all` chạy bình thường.
+- [ ] `python src/train_xgboost.py --series all` chạy bình thường.
+- [ ] `python src/baseline.py` chạy bình thường.
+- [ ] SARIMA residual target được tạo và aligned.
+- [ ] XGBoost residual correction được training.
+- [ ] Hybrid forecast được sinh.
+- [ ] Unified evaluation được sinh.
+- [ ] Mỗi model có cùng schema.
+- [ ] Mỗi model có metrics Val2023/Val2024/Test2025.
+- [ ] No leakage assertion passes.
+- [ ] Revenue conservation = 0.
+- [ ] Final comparison table generated.
+- [ ] README updated with final metrics and output paths.

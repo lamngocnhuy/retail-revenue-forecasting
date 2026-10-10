@@ -1,0 +1,6 @@
+check,status,rows
+common_columns,PASS,314
+residual_consistency,PASS,314
+week_start_unique,PASS,314
+training_end_before_eval,PASS,314
+finite_values,PASS,314
