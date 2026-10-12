@@ -4,7 +4,11 @@ File này là SINGLE SOURCE OF TRUTH cho toàn bộ logic XGBoost. Notebook
 notebooks/03_xgboost_modeling.ipynb import và gọi lại các hàm ở đây
 (không viết lại logic), nên hai bản luôn cho cùng kết quả.
 
-Pipeline (mirror đúng protocol của train_sarima.py để so sánh công bằng):
+Phạm vi: CHỈ XGBoost. File này không đọc output của mô hình khác và không so sánh
+với SARIMA / baseline — phần so sánh mô hình do evaluation pipeline chung của nhóm
+đảm nhận, đọc từ outputs/xgboost/forecast_*.csv (cùng format với outputs/sarima/).
+
+Pipeline (dùng cùng protocol với train_sarima.py để eval pipeline so sánh được):
 1. Load feature matrix trực tiếp từ feature_engineering.build_feature_matrix()
    (42 features, shift(1) chống leakage, 366 tuần Monday-based).
 2. Chia tập theo split_year (giống preprocess.SplitConfig / train_sarima.load_series):
@@ -42,7 +46,6 @@ Outputs (outputs/xgboost/):
     best_params_{series}.json
     feature_importance_{series}.csv    gain / weight / cover (normalized)
     top_errors_{series}.csv            top-N tuần sai số lớn nhất + cờ sự kiện
-    comparison_sarima_{series}.csv     actual, sarima_forecast, xgb_forecast theo tuần
     xgb_summary_all_series.csv         bảng tổng hợp chéo 4 chuỗi
     plots/                             biểu đồ forecast & feature importance
 """
@@ -73,10 +76,9 @@ from statsmodels.stats.diagnostic import acorr_ljungbox
 
 # Kế thừa trực tiếp feature matrix của nhóm
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import feature_engineering as fe  # noqa: E402
+import feature_engineering as fe
 
-# ── Paths ──
-SARIMA_DIR = Path("outputs/sarima")
+# Paths 
 OUTPUT_DIR = Path("outputs/xgboost")
 PLOT_DIR = OUTPUT_DIR / "plots"
 
@@ -86,10 +88,8 @@ N_ITER_DEFAULT = 60
 TIE_BAND = 0.03          # 3% — cùng ngưỡng Parsimony với SARIMA
 STABILITY_WARN = 1.5     # cùng ngưỡng cảnh báo với SARIMA (RMSE_2024/RMSE_2023)
 
-# Cột không phải feature
 NON_FEATURE_COLS = ("target_revenue", "split_year")
 
-# Số tuần kỳ vọng của mỗi tập (assert cứng)
 EXPECTED_SPLIT_SIZES = {"train_2019_2022": 209, "val_2023": 52, "train_2019_2023": 261,
                         "val_2024": 53, "train_2019_2024": 314, "test_2025": 52}
 
@@ -97,7 +97,6 @@ EXPECTED_SPLIT_SIZES = {"train_2019_2022": 209, "val_2023": 52, "train_2019_2023
 EVAL_PERIODS = {"val2023": ("train_2019_2022", "val_2023"),
                 "val2024": ("train_2019_2023", "val_2024")}
 
-# Không gian siêu tham số — data nhỏ (209 tuần train) nên ưu tiên cây nông + regularization
 PARAM_SPACE: dict[str, list[Any]] = {
     "n_estimators":     [100, 200, 300, 500, 800],
     "learning_rate":    [0.01, 0.03, 0.05, 0.1],
@@ -109,18 +108,17 @@ PARAM_SPACE: dict[str, list[Any]] = {
     "reg_alpha":        [0.0, 0.1, 1.0],
 }
 FIXED_PARAMS: dict[str, Any] = {
-    "objective": "reg:squarederror",   # khớp metric chọn model là RMSE
+    "objective": "reg:squarederror",  
     "tree_method": "hist",
     "random_state": RANDOM_STATE,
     "n_jobs": 1,                      
 }
 
-# Cờ dùng cho phân tích lỗi
 FLAG_COLS = ["is_covid_period", "is_eda_iqr_outlier", "is_black_friday_week",
              "is_cyber_monday_week", "is_christmas_week", "is_lag_1_high_revenue"]
 
 
-# 1. Metrics (giống train_sarima.compute_metrics + WAPE)
+# 1. Metrics
 
 def compute_metrics(y_true, y_pred) -> dict[str, float]:
     """MAE, RMSE, sMAPE (công thức giống SARIMA/baseline) + WAPE."""
@@ -139,8 +137,7 @@ def compute_metrics(y_true, y_pred) -> dict[str, float]:
             "smape": round(smape, 4), "wape": round(wape, 4)}
 
 
-# 2. Data loading, split & leakage checks
-
+# 2. Data loading, split & leakage checks 
 def load_feature_matrix(series_name: str, quiet: bool = False) -> pd.DataFrame:
     """Gọi build_feature_matrix() của feature_engineering.py (không tự tạo feature)."""
     if quiet:
@@ -151,12 +148,10 @@ def load_feature_matrix(series_name: str, quiet: bool = False) -> pd.DataFrame:
     df.index.name = "week_start"
     return df
 
-
 def get_feature_cols(df: pd.DataFrame) -> list[str]:
     cols = [c for c in df.columns if c not in NON_FEATURE_COLS]
     assert "revenue" not in cols and "target_revenue" not in cols, "Leakage: target in features"
     return cols
-
 
 def feature_group(name: str) -> str:
     if name.startswith("lag_revenue_"):
@@ -173,7 +168,6 @@ def feature_group(name: str) -> str:
         return "YoY/MoM"
     return "Other"
 
-
 def split_frame(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Chia theo split_year — đúng SplitConfig của preprocess.py, có assert số tuần."""
     sy = df["split_year"]
@@ -189,7 +183,6 @@ def split_frame(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
         assert len(splits[name]) == n, f"{name}: {len(splits[name])} tuần, kỳ vọng {n}"
     return splits
 
-
 def check_split_boundaries(splits: dict[str, pd.DataFrame]) -> None:
     """lag_revenue_1 tuần đầu mỗi tập = actual tuần cuối tập trước; không chồng lấn thời gian."""
     for prev_key, next_key in (("train_2019_2022", "val_2023"), ("val_2023", "val_2024"),
@@ -199,7 +192,6 @@ def check_split_boundaries(splits: dict[str, pd.DataFrame]) -> None:
         assert abs(last_actual - first_lag1) < 1e-6, f"Leakage tại biên {prev_key} → {next_key}"
         assert splits[prev_key].index.max() < splits[next_key].index.min(), \
             f"Chồng lấn thời gian {prev_key} / {next_key}"
-
 
 def _rebuild_causal_features(frame: pd.DataFrame) -> pd.DataFrame:
     """Tái tạo nhóm lag / rolling / time / COVID / ratio bằng đúng hàm của feature_engineering.
@@ -232,7 +224,6 @@ def assert_no_target_leakage(series_name: str, splits: dict[str, pd.DataFrame]) 
             assert diff < 1e-9, f"Leakage: feature tại {wk.date()} đổi khi target tại t đổi"
     return probes
 
-
 def prepare_series(series_name: str, quiet: bool = True) -> tuple[pd.DataFrame, dict, list[str]]:
     """Load + split + toàn bộ kiểm tra leakage cho 1 chuỗi. Dùng chung cho script và notebook."""
     df = load_feature_matrix(series_name, quiet=quiet)
@@ -244,10 +235,8 @@ def prepare_series(series_name: str, quiet: bool = True) -> tuple[pd.DataFrame, 
 
 
 # 3. Model helpers
-
 def make_model(params: dict[str, Any]) -> XGBRegressor:
     return XGBRegressor(**FIXED_PARAMS, **params)
-
 
 def fit_predict(params: dict[str, Any], train: pd.DataFrame, future: pd.DataFrame,
                 feature_cols: list[str]) -> tuple[XGBRegressor, pd.Series]:
@@ -264,7 +253,6 @@ def fit_predict(params: dict[str, Any], train: pd.DataFrame, future: pd.DataFram
     pred = pd.Series(model.predict(future[feature_cols]), index=future.index).astype("float64")
     return model, pred.clip(lower=0)
 
-
 def cv_rmse(params: dict[str, Any], train: pd.DataFrame, feature_cols: list[str],
             n_splits: int = 4) -> float:
     """TimeSeriesSplit CV bên trong Train 2019-2022 (diagnostic chống overfit Val2023)."""
@@ -276,14 +264,12 @@ def cv_rmse(params: dict[str, Any], train: pd.DataFrame, feature_cols: list[str]
         scores.append(compute_metrics(te["target_revenue"], p)["rmse"])
     return float(np.mean(scores))
 
-
 def _params_from_row(row: pd.Series) -> dict[str, Any]:
     return {k: (int(row[k]) if isinstance(PARAM_SPACE[k][0], int) else float(row[k]))
             for k in PARAM_SPACE}
 
 
 # 4. Tuning on Val2023
-
 def select_best_config(res: pd.DataFrame) -> tuple[int, int]:
     """Luật chọn giống SARIMA: RMSE Val2023 thấp nhất, tie-band 3% → config đơn giản nhất.
 
@@ -294,7 +280,6 @@ def select_best_config(res: pd.DataFrame) -> tuple[int, int]:
     best_idx = tied.sort_values(["max_depth", "n_estimators", "reg_lambda"],
                                 ascending=[True, True, False], kind="mergesort").index[0]
     return int(best_idx), len(tied)
-
 
 def tune(splits: dict[str, pd.DataFrame], feature_cols: list[str],
          n_iter: int = N_ITER_DEFAULT, verbose: bool = True) -> tuple[dict[str, Any], pd.DataFrame]:
@@ -327,7 +312,6 @@ def tune(splits: dict[str, pd.DataFrame], feature_cols: list[str],
         print(f"  Params: {best_params}")
     return best_params, res
 
-
 def load_saved_tuning(series_name: str,
                       output_dir: Path = OUTPUT_DIR) -> tuple[dict[str, Any], pd.DataFrame]:
     """Nạp best params + bảng tuning đã lưu (dùng khi notebook đặt RUN_TUNING=False)."""
@@ -348,16 +332,6 @@ def load_saved_tuning(series_name: str,
 
 
 # 5. Evaluation
-
-def load_sarima(series_name: str, period: str, verbose: bool = True) -> pd.DataFrame | None:
-    path = SARIMA_DIR / f"forecast_{period}_{series_name}.csv"
-    if not path.exists():
-        if verbose:
-            print(f"  WARN: không tìm thấy {path} — bỏ qua so sánh SARIMA")
-        return None
-    return pd.read_csv(path, parse_dates=["week_start"]).set_index("week_start")
-
-
 def predict_validation(best_params: dict[str, Any], splits: dict[str, pd.DataFrame],
                        feature_cols: list[str]) -> tuple[dict[str, XGBRegressor], dict[str, pd.Series]]:
     """Val2023 (fit 2019-2022) và Val2024 (refit 2019-2023, không retune)."""
@@ -366,28 +340,19 @@ def predict_validation(best_params: dict[str, Any], splits: dict[str, pd.DataFra
         models[period], preds[period] = fit_predict(best_params, splits[tr_key], splits[va_key], feature_cols)
     return models, preds
 
+def evaluate_xgboost(splits: dict[str, pd.DataFrame], preds: dict[str, pd.Series]) -> pd.DataFrame:
+    """Metric của riêng XGBoost theo từng kỳ (index = period).
 
-def evaluate_models(series_name: str, splits: dict[str, pd.DataFrame],
-                    preds: dict[str, pd.Series]) -> pd.DataFrame:
-    """Bảng dài: metric của XGBoost, SARIMA và Mean baseline (trung bình tập train) theo từng kỳ."""
-    rows = []
-    for period, (tr_key, va_key) in EVAL_PERIODS.items():
-        y = splits[va_key]["target_revenue"]
-        candidates = [("XGBoost", preds[period]),
-                      ("Mean baseline", np.full(len(y), splits[tr_key]["target_revenue"].mean()))]
-        sar = load_sarima(series_name, period, verbose=False)
-        if sar is not None:
-            assert np.allclose(sar["actual"].values, y.values), "Actual SARIMA ≠ actual feature matrix"
-            candidates.insert(1, ("SARIMA", sar["sarima_forecast"]))
-        for model_name, p in candidates:
-            rows.append({"series": series_name, "period": period, "model": model_name,
-                         **compute_metrics(y, p)})
-    return pd.DataFrame(rows)
-
+    So sánh với SARIMA / baseline KHÔNG làm ở đây — thuộc evaluation pipeline chung.
+    """
+    rows = {period: compute_metrics(splits[va_key]["target_revenue"], preds[period])
+            for period, (_, va_key) in EVAL_PERIODS.items()}
+    return pd.DataFrame.from_dict(rows, orient="index").rename_axis("period")
 
 def stability_summary(eval_df: pd.DataFrame, splits: dict[str, pd.DataFrame],
                       preds: dict[str, pd.Series]) -> dict[str, Any]:
-    x = eval_df[eval_df["model"] == "XGBoost"].set_index("period")
+    """Độ ổn định của XGBoost giữa Val2023 và Val2024 (eval_df từ evaluate_xgboost)."""
+    x = eval_df
     ratio = x.loc["val2024", "rmse"] / x.loc["val2023", "rmse"]
     all_pred = pd.concat([preds["val2023"], preds["val2024"]])
     all_act = pd.concat([splits["val_2023"], splits["val_2024"]])["target_revenue"]
@@ -396,9 +361,7 @@ def stability_summary(eval_df: pd.DataFrame, splits: dict[str, pd.DataFrame],
             "wape_delta_pp": round(float(x.loc["val2024", "wape"] - x.loc["val2023", "wape"]), 4),
             "pred_std_over_actual_std": round(float(all_pred.std() / all_act.std()), 4)}
 
-
 # 6. Feature importance
-
 def feature_importance(model: XGBRegressor, feature_cols: list[str], tag: str = "") -> pd.DataFrame:
     """gain / weight / cover, chuẩn hóa tổng = 1. tag → hậu tố tên cột (vd 'val2024_model')."""
     booster = model.get_booster()
@@ -410,19 +373,15 @@ def feature_importance(model: XGBRegressor, feature_cols: list[str], tag: str = 
         out[f"{kind}{suffix}"] = (col / col.sum()).round(6) if col.sum() > 0 else col
     return out
 
-
 # 7. Error-analysis flags
-
 def black_friday(year: int) -> pd.Timestamp:
     """Black Friday = ngày sau Thứ Năm thứ 4 của tháng 11."""
     nov1 = pd.Timestamp(year=year, month=11, day=1)
     first_thu = nov1 + pd.Timedelta(days=(3 - nov1.weekday()) % 7)
     return first_thu + pd.Timedelta(days=21 + 1)
 
-
 def _monday(d: pd.Timestamp) -> pd.Timestamp:
     return d - pd.Timedelta(days=d.weekday())
-
 
 def event_flags(index: pd.DatetimeIndex) -> pd.DataFrame:
     """Cờ sự kiện bán lẻ theo tuần (week_start là Thứ Hai)."""
@@ -436,7 +395,6 @@ def event_flags(index: pd.DatetimeIndex) -> pd.DataFrame:
         "is_christmas_week":    index.isin(list(xmas_weeks)).astype(int),
     }, index=index)
 
-
 def iqr_outlier_flag(target: pd.Series) -> pd.Series:
     """Cờ outlier IQR trên toàn chuỗi 366 tuần — cùng quy tắc với báo cáo EDA.
 
@@ -446,10 +404,9 @@ def iqr_outlier_flag(target: pd.Series) -> pd.Series:
     iqr = q3 - q1
     return ((target < q1 - 1.5 * iqr) | (target > q3 + 1.5 * iqr)).astype(int)
 
-
 def build_error_table(series_name: str, df: pd.DataFrame, preds: dict[str, pd.Series],
                       top_n: int | None = None) -> pd.DataFrame:
-    """Bảng lỗi theo tuần + cờ sự kiện + sai số SARIMA cùng tuần.
+    """Bảng lỗi theo tuần của XGBoost + cờ sự kiện.
 
     top_n=None → mọi tuần; top_n=k → k tuần |residual| lớn nhất mỗi kỳ.
     """
@@ -469,11 +426,6 @@ def build_error_table(series_name: str, df: pd.DataFrame, preds: dict[str, pd.Se
         frame["is_lag_1_high_revenue"] = block["is_lag_1_high_revenue"]
         frame["is_eda_iqr_outlier"] = iqr_flag.loc[pred.index]
         frame = frame.join(ev)
-        sar = load_sarima(series_name, period, verbose=False)
-        if sar is not None:
-            frame["sarima_forecast"] = sar["sarima_forecast"]
-            frame["sarima_abs_error"] = sar["residual"].abs()
-            frame["xgb_better_than_sarima"] = (frame["abs_error"] < frame["sarima_abs_error"]).astype(int)
         frame["error_rank"] = frame["abs_error"].rank(ascending=False, method="first").astype(int)
         frame["any_known_event"] = (frame[FLAG_COLS].sum(axis=1) > 0).astype(int)
         frame = frame.sort_values("abs_error", ascending=False)
@@ -481,7 +433,6 @@ def build_error_table(series_name: str, df: pd.DataFrame, preds: dict[str, pd.Se
     out = pd.concat(frames)
     out.index.name = "week_start"
     return out.reset_index()
-
 
 def residual_whiteness(preds: dict[str, pd.Series], df: pd.DataFrame,
                        lags: tuple[int, ...] = (4, 10)) -> dict[str, float]:
@@ -496,7 +447,6 @@ def residual_whiteness(preds: dict[str, pd.Series], df: pd.DataFrame,
 
 
 # 8. Plots
-
 def make_plots(series_name: str, df: pd.DataFrame, preds: dict[str, pd.Series],
                fi: pd.DataFrame) -> None:
     try:
@@ -508,17 +458,12 @@ def make_plots(series_name: str, df: pd.DataFrame, preds: dict[str, pd.Series],
     PLOT_DIR.mkdir(parents=True, exist_ok=True)
 
     fig, ax = plt.subplots(figsize=(12, 4.5))
-    # Không vẽ Test2025 — giữ tập test "chưa nhìn thấy" trong giai đoạn phân tích
     hist = df.loc[(df.index >= "2022-07-01") & (df["split_year"] <= 2024), "target_revenue"]
     ax.plot(hist.index, hist.values, color="#333333", lw=1.4, label="Actual")
     for period in ("val2023", "val2024"):
         p = preds[period]
         ax.plot(p.index, p.values, color="#1f77b4", lw=1.6,
                 label="XGBoost" if period == "val2023" else None)
-        sar = load_sarima(series_name, period, verbose=False)
-        if sar is not None:
-            ax.plot(sar.index, sar["sarima_forecast"], color="#ff7f0e", lw=1.2, ls="--",
-                    label="SARIMA" if period == "val2023" else None)
     ax.axvline(pd.Timestamp("2024-01-01"), color="grey", ls=":", lw=1)
     ax.set_title(f"[{series_name.upper()}] One-step-ahead forecast — Val2023 & Val2024")
     ax.set_ylabel("Weekly revenue")
@@ -540,7 +485,6 @@ def make_plots(series_name: str, df: pd.DataFrame, preds: dict[str, pd.Series],
 
 
 # 9. Save helpers
-
 def save_forecast(series_name: str, period: str, df: pd.DataFrame, pred: pd.Series) -> None:
     """Format giống hệt SARIMA: week_start, actual, <model>_forecast, residual."""
     actual = df.loc[pred.index, "target_revenue"]
@@ -553,15 +497,14 @@ def save_forecast(series_name: str, period: str, df: pd.DataFrame, pred: pd.Seri
     out.to_csv(OUTPUT_DIR / f"forecast_{period}_{series_name}.csv", index=False)
 
 
-# 10. Main pipeline
-
+# 10. Main pipeline 
 def run_xgboost_pipeline(series_name: str, n_iter: int, top_n: int) -> dict[str, Any]:
     name = series_name.lower()
     print(f"\n{'=' * 70}\n  XGBOOST PIPELINE — {name.upper()}\n{'=' * 70}")
 
     # Stage 1: Load + split + leakage checks
     df, splits, feature_cols = prepare_series(name, quiet=False)
-    print(f"  Leakage checks PASSED (split boundaries + perturbation 3 tuần)")
+    print("  Leakage checks PASSED (split boundaries + perturbation 3 tuần)")
     print(f"  Features={len(feature_cols)} | Train={len(splits['train_2019_2022'])} | "
           f"Val2023={len(splits['val_2023'])} | Val2024={len(splits['val_2024'])} | "
           f"Test2025={len(splits['test_2025'])}")
@@ -573,11 +516,10 @@ def run_xgboost_pipeline(series_name: str, n_iter: int, top_n: int) -> dict[str,
     # Stage 3-4: Val2023 + Stability Val2024 (không retune)
     print("\n[Stage 3-4] Val2023 (fit 2019-2022) + stability Val2024 (refit 2019-2023)...")
     models, preds = predict_validation(best_params, splits, feature_cols)
-    eval_df = evaluate_models(name, splits, preds)
+    eval_df = evaluate_xgboost(splits, preds)
     stab = stability_summary(eval_df, splits, preds)
-    met = eval_df.set_index(["model", "period"])
     for period in EVAL_PERIODS:
-        m = met.loc[("XGBoost", period)]
+        m = eval_df.loc[period]
         print(f"  {period}: RMSE={m['rmse']:.2f} MAE={m['mae']:.2f} "
               f"sMAPE={m['smape']:.2f}% WAPE={m['wape']:.2f}%")
     print(f"  Stability ratio RMSE_2024/RMSE_2023 = {stab['stability_ratio_rmse']:.2f} "
@@ -607,45 +549,23 @@ def run_xgboost_pipeline(series_name: str, n_iter: int, top_n: int) -> dict[str,
     for _, r in fi.head(5).iterrows():
         print(f"    {r['feature']:<24s} {r['group']:<8s} gain={r['gain_val2024_model']:.3f}")
 
-    # Stage 8: Top errors, so sánh SARIMA, Ljung-Box
+    # Stage 8: Top errors + Ljung-Box (chỉ XGBoost)
     top_err = build_error_table(name, df, preds, top_n).drop(columns=["series"])
     top_err.to_csv(OUTPUT_DIR / f"top_errors_{name}.csv", index=False)
-
-    comp = pd.concat([pd.DataFrame({"period": period, "actual": df.loc[p.index, "target_revenue"],
-                                    "xgb_forecast": p}) for period, p in preds.items()])
-    for period in preds:
-        sar = load_sarima(name, period)
-        if sar is not None:
-            comp.loc[comp["period"] == period, "sarima_forecast"] = sar["sarima_forecast"]
-    comp.index.name = "week_start"
-    comp.reset_index().to_csv(OUTPUT_DIR / f"comparison_sarima_{name}.csv", index=False)
 
     lb = residual_whiteness(preds, df)
     make_plots(name, df, preds, fi)
     print(f"\n[Stage 8] Top-{top_n} lỗi/kỳ: {int(top_err['any_known_event'].sum())}/{len(top_err)} "
           f"tuần trùng sự kiện/cờ đã biết | Ljung-Box: {lb}")
 
-    def metric(model: str, period: str, key: str):
-        return float(met.loc[(model, period), key]) if (model, period) in met.index else None
-
     summary = {
         "series": name,
         **{f"best_{k}": v for k, v in best_params.items()},
-        **{f"{k}_2023": metric("XGBoost", "val2023", k) for k in ("mae", "rmse", "smape", "wape")},
-        **{f"{k}_2024": metric("XGBoost", "val2024", k) for k in ("mae", "rmse", "smape", "wape")},
+        **{f"{k}_2023": float(eval_df.loc["val2023", k]) for k in ("mae", "rmse", "smape", "wape")},
+        **{f"{k}_2024": float(eval_df.loc["val2024", k]) for k in ("mae", "rmse", "smape", "wape")},
         "stability_ratio_rmse": stab["stability_ratio_rmse"],
         "stability_flag": stab["stability_flag"],
         "wape_delta_pp": stab["wape_delta_pp"],
-        "sarima_rmse_2023": metric("SARIMA", "val2023", "rmse"),
-        "sarima_rmse_2024": metric("SARIMA", "val2024", "rmse"),
-        "sarima_wape_2023": metric("SARIMA", "val2023", "wape"),
-        "sarima_wape_2024": metric("SARIMA", "val2024", "wape"),
-        "mean_ref_rmse_2023": metric("Mean baseline", "val2023", "rmse"),
-        "mean_ref_rmse_2024": metric("Mean baseline", "val2024", "rmse"),
-        "skill_vs_mean_2023_pct": round(100 * (1 - metric("XGBoost", "val2023", "rmse")
-                                               / metric("Mean baseline", "val2023", "rmse")), 2),
-        "skill_vs_mean_2024_pct": round(100 * (1 - metric("XGBoost", "val2024", "rmse")
-                                               / metric("Mean baseline", "val2024", "rmse")), 2),
         "pred_std_over_actual_std": stab["pred_std_over_actual_std"],
         **lb,
         **{f"{k}_test2025": v for k, v in m25.items()},
@@ -655,7 +575,6 @@ def run_xgboost_pipeline(series_name: str, n_iter: int, top_n: int) -> dict[str,
     }
     print(f"\n  DONE: {name.upper()}")
     return summary
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
@@ -674,8 +593,7 @@ def main() -> None:
     summary_df.to_csv(path, index=False)
     print(f"\nSummary saved: {path}")
     print(summary_df[["series", "rmse_2023", "rmse_2024", "stability_ratio_rmse",
-                      "wape_2023", "wape_2024", "sarima_rmse_2023", "sarima_rmse_2024",
-                      "mean_ref_rmse_2023", "mean_ref_rmse_2024"]].to_string(index=False))
+                      "wape_2023", "wape_2024", "pred_std_over_actual_std"]].to_string(index=False))
 
 
 if __name__ == "__main__":
