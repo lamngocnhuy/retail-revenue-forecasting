@@ -1,6 +1,9 @@
-check,status,rows
-common_columns,PASS,314
-residual_consistency,PASS,314
-week_start_unique,PASS,314
-training_end_before_eval,PASS,314
-finite_values,PASS,314
+check,status,detail,rows
+common_columns,PASS,all required columns present,2512
+residual_consistency,PASS,residual == actual - forecast (checked per artifact),2512
+week_start_unique,PASS,no duplicate week_start per artifact,2512
+training_end_before_eval,PASS,training_end <= evaluation week,2512
+finite_values,PASS,actual/forecast are finite (enforced during normalization),2512
+coverage_complete,PASS,"0 missing (series, period, model) combos",2512
+cross_model_actual_match,PASS,0 mismatched combos,2512
+cross_model_week_match,PASS,0 mismatched combos,2512
