@@ -1,0 +1,9 @@
+series,period,n_top_rows,mean_abs_error,max_abs_error,under_forecast,over_forecast,n_known_event
+mobile,val2023,10,692.14,873.78,3,7,1
+mobile,val2024,10,667.4,915.13,5,5,1
+online,val2023,10,817.45,1546.94,5,5,4
+online,val2024,10,641.22,903.58,7,3,2
+store,val2023,10,766.6,1240.06,8,2,4
+store,val2024,10,611.46,764.37,4,6,0
+total,val2023,10,1118.67,1501.9,6,4,2
+total,val2024,10,1126.7,1697.47,5,5,0

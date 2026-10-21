@@ -1,0 +1,137 @@
+{
+  "source": "data/raw/retailhive_10k.csv",
+  "week_definition": "Monday-based week; week_start is the Monday date",
+  "target": "weekly revenue is sum of transaction revenue",
+  "missing_week_policy": "Missing weeks are retained with 0.0 revenue, 0.0 quantity, and week_has_transactions=false; no missing weeks were observed in the current source data.",
+  "split_policy": {
+    "train_1_end": "2022-12-31",
+    "validation_1_year": 2023,
+    "train_2_end": "2023-12-31",
+    "validation_2_year": 2024,
+    "test_year": 2025
+  },
+  "covid_intervention_policy": {
+    "period_start": "2020-03-01",
+    "shock_end": "2020-06-30",
+    "period_end": "2021-12-31",
+    "meaning": "Flags identify calendar periods for EDA and intervention features; revenue is never removed, imputed or overwritten because of the flag."
+  },
+  "quality_report": {
+    "row_count": 12000,
+    "column_count": 10,
+    "columns": [
+      "product_title",
+      "rating",
+      "transaction_id",
+      "date",
+      "channel",
+      "region",
+      "customer_id",
+      "quantity",
+      "price",
+      "revenue"
+    ],
+    "missing_values": {
+      "product_title": 0,
+      "rating": 0,
+      "transaction_id": 0,
+      "date": 0,
+      "channel": 0,
+      "region": 0,
+      "customer_id": 0,
+      "quantity": 0,
+      "price": 0,
+      "revenue": 0
+    },
+    "duplicate_rows": 0,
+    "duplicate_transaction_ids": 0,
+    "invalid_date_count": 0,
+    "invalid_categories": {
+      "channel": [],
+      "region": []
+    },
+    "numeric_checks": {
+      "quantity": {
+        "negative_count": 0,
+        "zero_count": 0
+      },
+      "price": {
+        "negative_count": 0,
+        "zero_count": 0
+      },
+      "revenue": {
+        "negative_count": 0,
+        "zero_count": 0
+      }
+    },
+    "date_min": "2019-01-01",
+    "date_max": "2025-12-31",
+    "channel_counts": {
+      "Mobile": 4048,
+      "Store": 4029,
+      "Online": 3923
+    },
+    "revenue_quantity_price": {
+      "max_absolute_difference": 8.526512829121202e-14,
+      "mean_absolute_difference": 3.8277529294343065e-15,
+      "tolerance": 1e-09
+    }
+  },
+  "validation_report": {
+    "source_revenue": 1240598.0846089262,
+    "weekly_revenue": 1240598.0846089262,
+    "revenue_absolute_difference": 0.0,
+    "weekly_row_count": 366,
+    "weekly_channel_row_count": 1098,
+    "weekly_missing_count": 0,
+    "split_ranges": {
+      "train_2019_2022": {
+        "row_count": 209,
+        "week_start_min": "2018-12-31",
+        "week_start_max": "2022-12-26",
+        "split_years": [
+          2019,
+          2020,
+          2021,
+          2022
+        ]
+      },
+      "validation_2023": {
+        "row_count": 52,
+        "week_start_min": "2023-01-02",
+        "week_start_max": "2023-12-25",
+        "split_years": [
+          2023
+        ]
+      },
+      "train_2019_2023": {
+        "row_count": 261,
+        "week_start_min": "2018-12-31",
+        "week_start_max": "2023-12-25",
+        "split_years": [
+          2019,
+          2020,
+          2021,
+          2022,
+          2023
+        ]
+      },
+      "validation_2024": {
+        "row_count": 53,
+        "week_start_min": "2024-01-01",
+        "week_start_max": "2024-12-30",
+        "split_years": [
+          2024
+        ]
+      },
+      "test_2025": {
+        "row_count": 52,
+        "week_start_min": "2025-01-06",
+        "week_start_max": "2025-12-29",
+        "split_years": [
+          2025
+        ]
+      }
+    }
+  }
+}

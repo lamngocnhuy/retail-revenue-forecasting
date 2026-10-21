@@ -83,6 +83,14 @@ MANUAL_CANDIDATES: list[tuple[tuple, tuple]] = [
     ((2, _d_DEFAULT, 1), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(2,1)
     ((1, _d_DEFAULT, 2), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(1,2)
     ((2, _d_DEFAULT, 2), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(2,2)
+    
+    # ── Non-Seasonal (Bậc Cao để test thực nghiệm) ──
+    ((5, _d_DEFAULT, 0), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # AR(5)
+    ((5, _d_DEFAULT, 1), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(5,1)
+    ((5, _d_DEFAULT, 5), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(5,5)
+    ((7, _d_DEFAULT, 0), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # AR(7)
+    ((7, _d_DEFAULT, 1), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(7,1)
+    ((7, _d_DEFAULT, 2), (0, _D_DEFAULT, 0, SEASONAL_PERIOD)),  # ARMA(7,2)
 
     # ── Có Seasonal (Ghép P=1 hoặc Q=1 vào các model Non-seasonal tốt) ──
     # Seasonal candidates được bổ sung để kiểm tra khả năng tồn tại
@@ -198,8 +206,8 @@ def get_auto_arima_candidates(y_train: pd.Series) -> list[dict]:
             m=SEASONAL_PERIOD,
             d=None,   # tự xác định từ dữ liệu
             D=None,
-            max_p=2, max_q=2,
-            max_P=1,  max_Q=1,
+            max_p=4, max_q=4,
+            max_P=3,  max_Q=3,
             max_d=1,  max_D=1,
             max_order=6,
             stepwise=True,

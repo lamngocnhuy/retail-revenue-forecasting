@@ -1,0 +1,1103 @@
+{
+  "generated_at": "2026-10-16 22:42:19",
+  "git_commit": "f661bc759a23a4c2245a209bebc2dde39b25b79b",
+  "git_branch": "feature/evaluation-pipeline",
+  "protocol": {
+    "train_2019_2022": "209 weeks",
+    "val2023": "52 weeks (model selection / tuning)",
+    "val2024": "53 weeks (out-of-sample stability)",
+    "test2025": "52 weeks (final evaluation, never used for tuning)"
+  },
+  "best_params": {
+    "xgboost": {
+      "mobile": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 100,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 3,
+        "subsample": 0.6,
+        "colsample_bytree": 0.5,
+        "reg_lambda": 10.0,
+        "reg_alpha": 0.0
+      },
+      "online": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 100,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 3,
+        "subsample": 0.6,
+        "colsample_bytree": 0.5,
+        "reg_lambda": 10.0,
+        "reg_alpha": 0.0
+      },
+      "store": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 100,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 3,
+        "subsample": 0.6,
+        "colsample_bytree": 0.5,
+        "reg_lambda": 10.0,
+        "reg_alpha": 0.0
+      },
+      "total": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 100,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 3,
+        "subsample": 0.6,
+        "colsample_bytree": 0.5,
+        "reg_lambda": 10.0,
+        "reg_alpha": 0.0
+      }
+    },
+    "hybrid": {
+      "mobile": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 200,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 5,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_lambda": 20.0,
+        "reg_alpha": 1.0,
+        "gamma": 1.0
+      },
+      "online": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 200,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 5,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_lambda": 20.0,
+        "reg_alpha": 1.0,
+        "gamma": 1.0
+      },
+      "store": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 200,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 5,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_lambda": 20.0,
+        "reg_alpha": 1.0,
+        "gamma": 1.0
+      },
+      "total": {
+        "objective": "reg:squarederror",
+        "tree_method": "hist",
+        "random_state": 42,
+        "n_jobs": 1,
+        "n_estimators": 200,
+        "learning_rate": 0.01,
+        "max_depth": 2,
+        "min_child_weight": 5,
+        "subsample": 1.0,
+        "colsample_bytree": 1.0,
+        "reg_lambda": 20.0,
+        "reg_alpha": 1.0,
+        "gamma": 1.0
+      }
+    }
+  },
+  "coverage": {
+    "available": true,
+    "models": [
+      "Baseline",
+      "Hybrid",
+      "SARIMA",
+      "XGBoost"
+    ],
+    "series": [
+      "mobile",
+      "online",
+      "store",
+      "total"
+    ],
+    "periods": [
+      "test2025",
+      "val2023",
+      "val2024"
+    ],
+    "metric_rows": 48,
+    "expected_metric_rows": 48,
+    "missing_combinations": [],
+    "unexpected_combinations": [],
+    "duplicate_rows": 0,
+    "complete": true
+  },
+  "schema": {
+    "available": true,
+    "all_pass": true,
+    "checks": [
+      {
+        "check": "common_columns",
+        "status": "PASS",
+        "detail": "all required columns present",
+        "rows": 2512
+      },
+      {
+        "check": "residual_consistency",
+        "status": "PASS",
+        "detail": "residual == actual - forecast (checked per artifact)",
+        "rows": 2512
+      },
+      {
+        "check": "week_start_unique",
+        "status": "PASS",
+        "detail": "no duplicate week_start per artifact",
+        "rows": 2512
+      },
+      {
+        "check": "training_end_before_eval",
+        "status": "PASS",
+        "detail": "training_end <= evaluation week",
+        "rows": 2512
+      },
+      {
+        "check": "finite_values",
+        "status": "PASS",
+        "detail": "actual/forecast are finite (enforced during normalization)",
+        "rows": 2512
+      },
+      {
+        "check": "coverage_complete",
+        "status": "PASS",
+        "detail": "0 missing (series, period, model) combos",
+        "rows": 2512
+      },
+      {
+        "check": "cross_model_actual_match",
+        "status": "PASS",
+        "detail": "0 mismatched combos",
+        "rows": 2512
+      },
+      {
+        "check": "cross_model_week_match",
+        "status": "PASS",
+        "detail": "0 mismatched combos",
+        "rows": 2512
+      }
+    ]
+  },
+  "leakage": [
+    {
+      "series": "total",
+      "status": "PASS",
+      "target_col_present": true,
+      "n_features": 42,
+      "first_test_week": "2025-01-06",
+      "lag_revenue_1": 3005.906967,
+      "previous_actual": 3005.906967,
+      "detail": "lag_revenue_1 == previous week actual"
+    },
+    {
+      "series": "online",
+      "status": "PASS",
+      "target_col_present": true,
+      "n_features": 42,
+      "first_test_week": "2025-01-06",
+      "lag_revenue_1": 724.518749,
+      "previous_actual": 724.518749,
+      "detail": "lag_revenue_1 == previous week actual"
+    },
+    {
+      "series": "store",
+      "status": "PASS",
+      "target_col_present": true,
+      "n_features": 42,
+      "first_test_week": "2025-01-06",
+      "lag_revenue_1": 1429.473769,
+      "previous_actual": 1429.473769,
+      "detail": "lag_revenue_1 == previous week actual"
+    },
+    {
+      "series": "mobile",
+      "status": "PASS",
+      "target_col_present": true,
+      "n_features": 42,
+      "first_test_week": "2025-01-06",
+      "lag_revenue_1": 851.914449,
+      "previous_actual": 851.914449,
+      "detail": "lag_revenue_1 == previous week actual"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "outputs/baseline/baseline_summary.csv",
+      "sha256": "d1971eaf9f2a55612e16f5de3942f02bb88431658fdc3142bffaede72cfc7e01",
+      "bytes": 150,
+      "modified": "2026-10-08 21:07:40"
+    },
+    {
+      "path": "outputs/baseline/baseline_summary_all_series.csv",
+      "sha256": "36cb87f25740ffffcc016028df12cdf2bb88790075b9a3c8078dcfa5754668a2",
+      "bytes": 561,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/baseline_summary_mobile.csv",
+      "sha256": "4922231fad0796adc9a7dc9c4d00728cd1318e48d7d34cae0dde9147879e8329",
+      "bytes": 151,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/baseline_summary_online.csv",
+      "sha256": "57d180895b693ac85a93203980c5095448b3c45845ddebaad3b4c23818ed7bcf",
+      "bytes": 150,
+      "modified": "2026-10-15 21:56:02"
+    },
+    {
+      "path": "outputs/baseline/baseline_summary_store.csv",
+      "sha256": "3d2dc773e0ca518598ce93835623373cc4de94d97c70bccc22eb7e1a1cbd0b8c",
+      "bytes": 148,
+      "modified": "2026-10-15 21:57:15"
+    },
+    {
+      "path": "outputs/baseline/baseline_summary_total.csv",
+      "sha256": "d1971eaf9f2a55612e16f5de3942f02bb88431658fdc3142bffaede72cfc7e01",
+      "bytes": 150,
+      "modified": "2026-10-16 22:22:31"
+    },
+    {
+      "path": "outputs/baseline/forecast_test2025_mobile.csv",
+      "sha256": "23d9cb0526faff0e2880ecb661e9b685a57113aa583a8ed3faba4f02fe09c55b",
+      "bytes": 3895,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/forecast_test2025_online.csv",
+      "sha256": "77284670ee51595e1efe49f3962a057bbf4b86c431f680da65f943c6d83a7fe2",
+      "bytes": 3903,
+      "modified": "2026-10-15 21:56:02"
+    },
+    {
+      "path": "outputs/baseline/forecast_test2025_store.csv",
+      "sha256": "0953d152ee97d23d35232050facc506dc02c6b8ef3b6165244e3a40587a04c3c",
+      "bytes": 3900,
+      "modified": "2026-10-15 21:57:15"
+    },
+    {
+      "path": "outputs/baseline/forecast_test2025_total.csv",
+      "sha256": "48bba127643f55a4fda07d587d728320829ab9de5cbfc094aee4b9b7e938f577",
+      "bytes": 3875,
+      "modified": "2026-10-16 22:22:31"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2023_mobile.csv",
+      "sha256": "464e818960600bdaa47280755553565351d325693d28df5d5d3263069f73a071",
+      "bytes": 3892,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2023_online.csv",
+      "sha256": "6cb88da329516d637620a950de40a139b21ede6fbccdfd2ed3a425a7a6d400ca",
+      "bytes": 3887,
+      "modified": "2026-10-15 21:56:02"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2023_store.csv",
+      "sha256": "ea3124530a7e38bc58bbb7631de20d80325bcdfff2cc9f9c088f53e780f4ee69",
+      "bytes": 3897,
+      "modified": "2026-10-15 21:57:15"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2023_total.csv",
+      "sha256": "9feb26d867f1c076969a4148f9ec0828ee684fac4d3b1774caad42da84faae19",
+      "bytes": 3879,
+      "modified": "2026-10-16 22:22:31"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2024_mobile.csv",
+      "sha256": "28f5568816551ef332c6a97d2c6c73d5b3004184327c52fcbab872826adede7c",
+      "bytes": 3964,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2024_online.csv",
+      "sha256": "a780f4b6cf7f071ec5ae6593bda517d090f18f086a55777b9afcebf530e485d2",
+      "bytes": 3967,
+      "modified": "2026-10-15 21:56:02"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2024_store.csv",
+      "sha256": "b1c99eaa15c20ae5fe721ff4fcc69de8d5a8a80b783bcfcf9449f01d2c565687",
+      "bytes": 3970,
+      "modified": "2026-10-15 21:57:15"
+    },
+    {
+      "path": "outputs/baseline/forecast_val2024_total.csv",
+      "sha256": "f8948ffc203caee1803227f2c47c7152f4305e35edbe7f9227b2d101dcc1be76",
+      "bytes": 3948,
+      "modified": "2026-10-16 22:22:31"
+    },
+    {
+      "path": "outputs/baseline/prediction_check_25.csv",
+      "sha256": "a5dc8582e41a9cd7c4ebd443b5407e41a9cef4c99f4d5ddb4b2ff600065be07c",
+      "bytes": 2888,
+      "modified": "2026-10-08 21:07:40"
+    },
+    {
+      "path": "outputs/baseline/prediction_check_25_mobile.csv",
+      "sha256": "92730fd15124c2755577153660a4cd86358469471eb4074af72ed35a42db5860",
+      "bytes": 2906,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/prediction_check_25_online.csv",
+      "sha256": "64c94e25b2b57409c8c13f23d845408dd988cc8c4fbc1b39a7d00aad790c3085",
+      "bytes": 2904,
+      "modified": "2026-10-15 21:56:02"
+    },
+    {
+      "path": "outputs/baseline/prediction_check_25_store.csv",
+      "sha256": "8c65fa8c9328b38ad4691466c69851454ddf8defdeb558b2a46fe57c743cc48f",
+      "bytes": 2899,
+      "modified": "2026-10-15 21:57:15"
+    },
+    {
+      "path": "outputs/baseline/prediction_check_25_total.csv",
+      "sha256": "a5dc8582e41a9cd7c4ebd443b5407e41a9cef4c99f4d5ddb4b2ff600065be07c",
+      "bytes": 2888,
+      "modified": "2026-10-16 22:22:31"
+    },
+    {
+      "path": "outputs/baseline/val_23_results.csv",
+      "sha256": "a4984c9ddb4797cc145a88cb265821ba73f5b645c84e5906ebd5afa4b5b93433",
+      "bytes": 1959,
+      "modified": "2026-10-08 21:07:40"
+    },
+    {
+      "path": "outputs/baseline/val_23_results_mobile.csv",
+      "sha256": "2702bb431e93e35cb7acc86ff209a58c86afc57db0f087ba109d530194191efa",
+      "bytes": 1945,
+      "modified": "2026-10-15 21:58:35"
+    },
+    {
+      "path": "outputs/baseline/val_23_results_online.csv",
+      "sha256": "4a3c495366e82f89d9814b9f33dde34df46b934f71e29bedb844914e19c6dfd0",
+      "bytes": 1955,
+      "modified": "2026-10-15 21:56:02"
+    },
+    {
+      "path": "outputs/baseline/val_23_results_store.csv",
+      "sha256": "9fa5e9a74202b78a8b4ba45f4d4df924b98b95b6771edaa1a6625f745b6eb390",
+      "bytes": 1954,
+      "modified": "2026-10-15 21:57:15"
+    },
+    {
+      "path": "outputs/baseline/val_23_results_total.csv",
+      "sha256": "a4984c9ddb4797cc145a88cb265821ba73f5b645c84e5906ebd5afa4b5b93433",
+      "bytes": 1959,
+      "modified": "2026-10-16 22:22:31"
+    },
+    {
+      "path": "outputs/error_analysis/hybrid_alignment_check.csv",
+      "sha256": "66a3defed228c1390a86f9f50fdeeeec653fcc1ed7a1f3fe7b87a79861cc07b0",
+      "bytes": 398,
+      "modified": "2026-10-16 22:42:17"
+    },
+    {
+      "path": "outputs/error_analysis/hybrid_residual_analysis.csv",
+      "sha256": "e6acff04cf6b11fdd979db3c45c17a16a1f93c2f3bbb9a7317cc3334b232ff78",
+      "bytes": 1786,
+      "modified": "2026-10-16 22:42:17"
+    },
+    {
+      "path": "outputs/error_analysis/xgboost_error_summary.csv",
+      "sha256": "cffddec17c6100362fdd46372e9802d793aadf2827d492912eac1289fcc735bf",
+      "bytes": 408,
+      "modified": "2026-10-16 22:42:17"
+    },
+    {
+      "path": "outputs/error_analysis/xgboost_event_breakdown.csv",
+      "sha256": "9cd4e2efe2ae80e4887dc56d761c174763ca7090ad8714f280c49ca07331a49c",
+      "bytes": 412,
+      "modified": "2026-10-16 22:42:17"
+    },
+    {
+      "path": "outputs/error_analysis/xgboost_top_errors_all.csv",
+      "sha256": "846dce86ad190e1aaa0d86301b3a66856786831e818e9362f21d8681bb2d3164",
+      "bytes": 12229,
+      "modified": "2026-10-16 22:42:17"
+    },
+    {
+      "path": "outputs/evaluation/comparison.csv",
+      "sha256": "5341a17013d231a38d88010d6ef8d43abb2f3937f752c134ab857e824d71159d",
+      "bytes": 2931,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/covid_phase_comparison.csv",
+      "sha256": "b7d573fc1e39b0a1466c4331cffca869e4568349ac71595d338b2565857873eb",
+      "bytes": 3471,
+      "modified": "2026-10-16 22:42:16"
+    },
+    {
+      "path": "outputs/evaluation/cross_model_issues.csv",
+      "sha256": "61b496e33f35173d7bd44abd92cf0a448baaafadca889ab51b52ba92496d9c26",
+      "bytes": 49,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/metrics_test2025.csv",
+      "sha256": "d5731d822f31f05f0d3c76fc96cb76f2e6782a06d05de4b32614b65843d398dc",
+      "bytes": 1021,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/metrics_val2023.csv",
+      "sha256": "ccf27b3198e9667f0539ff481a93a36d116126c1802daa4f60924781ab4e14bf",
+      "bytes": 1003,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/metrics_val2024.csv",
+      "sha256": "4fa26e1f65b08a7bb3c1a31d9becd0bd23ef1ec502247ccab77c6670d1994ada",
+      "bytes": 1003,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/missing_coverage.csv",
+      "sha256": "a0821d667405c7ce20f9f8f00bb01a115ae755627db431f29a86c0730907f7d1",
+      "bytes": 21,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/model_ranking.csv",
+      "sha256": "7c2c46630434a11b28e806703f103e386129f80226c4d7105615786de9249699",
+      "bytes": 3316,
+      "modified": "2026-10-16 22:42:16"
+    },
+    {
+      "path": "outputs/evaluation/normalized_forecasts.csv",
+      "sha256": "7399bac7ca80086371de2a98385191fe36bd6425a0dfc6faa2e7f04c042e661d",
+      "bytes": 253917,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/period_metric_summary.csv",
+      "sha256": "4c145ab01c9151b7994431e625848186f137cf6c803b8af0ae9cbee35c34a0a5",
+      "bytes": 690,
+      "modified": "2026-10-16 22:42:16"
+    },
+    {
+      "path": "outputs/evaluation/schema_validation.csv",
+      "sha256": "a2726e651172c8a3dc003b4aca78abb30c04d586c8d182534ac0927b21a34738",
+      "bytes": 566,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/evaluation/series_metric_summary.csv",
+      "sha256": "85281dc6a6656e551103d40b2d90c6179ae95cd4633322e8cf6c2d83cab2bfb5",
+      "bytes": 874,
+      "modified": "2026-10-16 22:42:16"
+    },
+    {
+      "path": "outputs/evaluation/summary.csv",
+      "sha256": "bd8726862a9012147c8e1f9154901433021874a07a0654d1fb4032a4f35fe6fb",
+      "bytes": 826,
+      "modified": "2026-10-16 22:42:14"
+    },
+    {
+      "path": "outputs/hybrid/best_params_mobile.json",
+      "sha256": "8cd17fb048a06612ea9ea6d53483b73ef205d8e78568bf4f2752910f07f8e99a",
+      "bytes": 309,
+      "modified": "2026-10-16 22:42:12"
+    },
+    {
+      "path": "outputs/hybrid/best_params_online.json",
+      "sha256": "8cd17fb048a06612ea9ea6d53483b73ef205d8e78568bf4f2752910f07f8e99a",
+      "bytes": 309,
+      "modified": "2026-10-16 22:41:05"
+    },
+    {
+      "path": "outputs/hybrid/best_params_store.json",
+      "sha256": "8cd17fb048a06612ea9ea6d53483b73ef205d8e78568bf4f2752910f07f8e99a",
+      "bytes": 309,
+      "modified": "2026-10-16 22:41:39"
+    },
+    {
+      "path": "outputs/hybrid/best_params_total.json",
+      "sha256": "8cd17fb048a06612ea9ea6d53483b73ef205d8e78568bf4f2752910f07f8e99a",
+      "bytes": 309,
+      "modified": "2026-10-16 22:40:32"
+    },
+    {
+      "path": "outputs/hybrid/forecast_test2025_mobile.csv",
+      "sha256": "7a5baa3617ad778cb5f6d1762f61d45144c24e90ba97a765c606fdc35569b00b",
+      "bytes": 5541,
+      "modified": "2026-10-16 22:42:12"
+    },
+    {
+      "path": "outputs/hybrid/forecast_test2025_online.csv",
+      "sha256": "e825812fa6048c7f54461605a134b17c5e218f854611ea313ecd2a0956e346ff",
+      "bytes": 5566,
+      "modified": "2026-10-16 22:41:05"
+    },
+    {
+      "path": "outputs/hybrid/forecast_test2025_store.csv",
+      "sha256": "3c049d996dbd2a5e204a74e1cde6e6c86174b7133869270402fea8b78d44d730",
+      "bytes": 5578,
+      "modified": "2026-10-16 22:41:39"
+    },
+    {
+      "path": "outputs/hybrid/forecast_test2025_total.csv",
+      "sha256": "25aae9e9570a172699c68ff1a36a96909bf2e0ca6f110c578302aa123b152379",
+      "bytes": 5534,
+      "modified": "2026-10-16 22:40:32"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2023_mobile.csv",
+      "sha256": "6558319cde7cd2010637f703084685052e1e9aa0b03489aa5d194d54fdb76f21",
+      "bytes": 5527,
+      "modified": "2026-10-16 22:42:11"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2023_online.csv",
+      "sha256": "f7eadbb2dd43dafd4f2e5dc11df9f662b8b5faf25537d4981e6a6132f4c9bb01",
+      "bytes": 5556,
+      "modified": "2026-10-16 22:41:05"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2023_store.csv",
+      "sha256": "8e118cdfb4b7b685e90a556d2ca2377fa2e9410fd84c1b1d7829f04af02016a2",
+      "bytes": 5570,
+      "modified": "2026-10-16 22:41:38"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2023_total.csv",
+      "sha256": "914a76e2b436cb94a86d3eda29b2f4e2e06031fbe5932283de7310b16215e528",
+      "bytes": 5547,
+      "modified": "2026-10-16 22:40:31"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2024_mobile.csv",
+      "sha256": "adaa62416d3ed91988d1904ef77626865e4ddcd0e7570cdb7e607f419a963e64",
+      "bytes": 5651,
+      "modified": "2026-10-16 22:42:11"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2024_online.csv",
+      "sha256": "fe246b1e90543f573f8cc47ef7a9989c44ae2495c9067bb2a79c64514a955197",
+      "bytes": 5639,
+      "modified": "2026-10-16 22:41:05"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2024_store.csv",
+      "sha256": "f235c8ebcf0c1d6715146517c22307a6fb3428c56c408b12e6574e515cf48567",
+      "bytes": 5658,
+      "modified": "2026-10-16 22:41:38"
+    },
+    {
+      "path": "outputs/hybrid/forecast_val2024_total.csv",
+      "sha256": "1b17463b333a278ae62a940f7ff713453c7413f68d0ea6c3033094aeb31c0454",
+      "bytes": 5647,
+      "modified": "2026-10-16 22:40:32"
+    },
+    {
+      "path": "outputs/hybrid/hybrid_summary_all_series.csv",
+      "sha256": "7c58c41212063f19ce4bc8d84d1fb534759b3a443c5e44af105e52789493880a",
+      "bytes": 1360,
+      "modified": "2026-10-16 22:42:12"
+    },
+    {
+      "path": "outputs/hybrid/tuning_results_mobile.csv",
+      "sha256": "17e8eb7598ae45302248e1c80b420d9d22ae7402cd9c55f96ce2aba0a2f53b17",
+      "bytes": 2752,
+      "modified": "2026-10-16 22:42:12"
+    },
+    {
+      "path": "outputs/hybrid/tuning_results_online.csv",
+      "sha256": "fbe73d63e11a507f93711f4c8083da18ccac646c2100b988a7a2a6a386a43e0d",
+      "bytes": 2751,
+      "modified": "2026-10-16 22:41:05"
+    },
+    {
+      "path": "outputs/hybrid/tuning_results_store.csv",
+      "sha256": "770f11bcd9b96983e864ec6adcbbd3aa1ae3e6d0a5968c9b506e02a7fd095a50",
+      "bytes": 2751,
+      "modified": "2026-10-16 22:41:39"
+    },
+    {
+      "path": "outputs/hybrid/tuning_results_total.csv",
+      "sha256": "f1fc420a9986da52e9f94a7d00e78543f13c387101ebe58e4879769ee6329d42",
+      "bytes": 2753,
+      "modified": "2026-10-16 22:40:32"
+    },
+    {
+      "path": "outputs/sarima/eda_acf_pacf_mobile.png",
+      "sha256": "8bbd8cf1ec1677299cf6c13f24ee9154605cc0bb3a0dc8b38189f836d7b8b6f7",
+      "bytes": 103971,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/eda_acf_pacf_online.png",
+      "sha256": "035dcd5720dc0216d22a1a1b06ef27e7211fc9462cde75d162e42b290700985b",
+      "bytes": 105766,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/eda_acf_pacf_store.png",
+      "sha256": "abcc292472b73db25452c11e73af88469ee938a69e5cbfc77f6eb868e0446afa",
+      "bytes": 105480,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/eda_acf_pacf_total.png",
+      "sha256": "9469dff2e659ea618a7741abeec245db4131e3435de39328f5ac469298190835",
+      "bytes": 105607,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/eda_candidate_space.csv",
+      "sha256": "ebe2e32deceee788ed828b2d08faa29467e254f89e3abc6fc482b27310f59c78",
+      "bytes": 1243,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/eda_stationarity.csv",
+      "sha256": "357adc911cf62bdec44bfa3fc1fa14b623212dc2137d73e083c3d50044256391",
+      "bytes": 324,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/forecast_test2025_mobile.csv",
+      "sha256": "c070dc7be00750b303d9746b42c5d1d68465b2e225322f59a7b0e8596d294972",
+      "bytes": 3580,
+      "modified": "2026-10-16 22:29:16"
+    },
+    {
+      "path": "outputs/sarima/forecast_test2025_online.csv",
+      "sha256": "3018f4ea8a3ecd379a04c5b91cebbc890ce3813e5d1a04cb002109b01ec2892c",
+      "bytes": 3587,
+      "modified": "2026-10-16 22:27:18"
+    },
+    {
+      "path": "outputs/sarima/forecast_test2025_store.csv",
+      "sha256": "a6ee7f4997ec8d784c319de3a3b153bf8ce519a2b1899beff4a1fefbd77243fb",
+      "bytes": 3585,
+      "modified": "2026-10-16 22:27:58"
+    },
+    {
+      "path": "outputs/sarima/forecast_test2025_total.csv",
+      "sha256": "13bb051dcf8cc02ca488b6a82aa79a4da9e0a4e984b0d9446c33f2ef5315fa18",
+      "bytes": 3550,
+      "modified": "2026-10-16 22:24:59"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2023_mobile.csv",
+      "sha256": "1090cd7afc02a8d5c3d1203ed61b103b9bbf9e3e60fa792af8d8b9b7d54d8290",
+      "bytes": 3580,
+      "modified": "2026-10-16 22:29:15"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2023_online.csv",
+      "sha256": "2fcec081b00372b8451ec9445ecb3969cd67f86aea95347d81b52a3ab2846169",
+      "bytes": 3574,
+      "modified": "2026-10-16 22:27:18"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2023_store.csv",
+      "sha256": "a8a12c25928677bbde57433967a414d5750317f14091b0dab8733220145e4cb7",
+      "bytes": 3578,
+      "modified": "2026-10-16 22:27:57"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2023_total.csv",
+      "sha256": "5fdbd3fec5f1ddd6a8345a5d021a92dec8f7a47f01eb69e9c4e4e70a7a95ab8e",
+      "bytes": 3545,
+      "modified": "2026-10-16 22:24:58"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2024_mobile.csv",
+      "sha256": "bbf88aeb6c2de88ea8f6224ae825e40de1708a3615ba0eb332d12b68358af6c4",
+      "bytes": 3647,
+      "modified": "2026-10-16 22:29:15"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2024_online.csv",
+      "sha256": "3b8717d4f594b57d1501f1976390e48a5ac424cea0251da9b4b35f3e53abe34e",
+      "bytes": 3633,
+      "modified": "2026-10-16 22:27:18"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2024_store.csv",
+      "sha256": "8f00b96c3ff999661e9eea6425dc37ee20b90bb1831a5f72095fc8f97f0af7df",
+      "bytes": 3650,
+      "modified": "2026-10-16 22:27:58"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2024_total.csv",
+      "sha256": "4a2feb9026374462bee9fe7936fa3d0a8b81d2e9497486ed5234324f3dc35538",
+      "bytes": 3628,
+      "modified": "2026-10-16 22:24:59"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2024_total_202.csv",
+      "sha256": "be56408e6fad7e13b9fa19f3181e4225202c2d8aeab0d44507554a014cf5978e",
+      "bytes": 3585,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/forecast_val2024_total_303.csv",
+      "sha256": "1905a246b446ed7672628eaf7a3dc4966d976c4debfc0b2f0d7e0a0cdc7a2706",
+      "bytes": 3565,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/optimizer_stability_report.txt",
+      "sha256": "e073cbb1c1759afac501bba9dae6926e562f1890f1838786dc6caa5610275159",
+      "bytes": 16483,
+      "modified": "2026-10-06 20:54:01"
+    },
+    {
+      "path": "outputs/sarima/residual_diagnostics_mobile.txt",
+      "sha256": "d2667e2b0ed06adfec6dbca61a5d77704ad187eb95f7b7f985709314e673479a",
+      "bytes": 1332,
+      "modified": "2026-10-16 22:29:15"
+    },
+    {
+      "path": "outputs/sarima/residual_diagnostics_online.txt",
+      "sha256": "659289194541e8ef8330dd37afdf219ee143d0cc350f9d6d8dc123f49777e59a",
+      "bytes": 1331,
+      "modified": "2026-10-16 22:27:18"
+    },
+    {
+      "path": "outputs/sarima/residual_diagnostics_store.txt",
+      "sha256": "c4e86bcca42edcb29143f5fe87ece2dbde9270e92e831d1ae8a7b4364ff421af",
+      "bytes": 1330,
+      "modified": "2026-10-16 22:27:57"
+    },
+    {
+      "path": "outputs/sarima/residual_diagnostics_total.txt",
+      "sha256": "dc60dcc375e7dd5b4dc700ea24c0166652383176cb8896ed9019fbf5b3e1bdf1",
+      "bytes": 1345,
+      "modified": "2026-10-16 22:24:58"
+    },
+    {
+      "path": "outputs/sarima/sarima_summary_all_series.csv",
+      "sha256": "ae5a44831c1dfc9aa871771be36655748afc12225157e1bc974bbca7e2d00446",
+      "bytes": 818,
+      "modified": "2026-10-16 22:29:16"
+    },
+    {
+      "path": "outputs/sarima/stability_chart.png",
+      "sha256": "c94a5856e5dd8333bfb921cf88da3060f628ffe10592e2ca9aed8ea888c27ba8",
+      "bytes": 139295,
+      "modified": "2026-10-15 21:04:09"
+    },
+    {
+      "path": "outputs/sarima/top10_models_rmse.png",
+      "sha256": "06ef84a2e32d65e68802ac5962d4177ed06038e2f29096304eb28e808c8b228a",
+      "bytes": 222010,
+      "modified": "2026-10-15 21:04:09"
+    },
+    {
+      "path": "outputs/sarima/top10_table.png",
+      "sha256": "9ef8016166268805f76a198fd8b42320184f23ea98fd3a47c951d9af04317028",
+      "bytes": 284184,
+      "modified": "2026-10-15 21:04:09"
+    },
+    {
+      "path": "outputs/sarima/tuning_results_mobile.csv",
+      "sha256": "efafe868e38a8265409f956abeb23988a03b095a677458ac7aecfcfe0ea3f83e",
+      "bytes": 3240,
+      "modified": "2026-10-16 22:29:15"
+    },
+    {
+      "path": "outputs/sarima/tuning_results_online.csv",
+      "sha256": "22089f15ae955624f0d7b0b3d1ec514b4f18ff3f9866aa9eccfa4748b46a202b",
+      "bytes": 3217,
+      "modified": "2026-10-16 22:27:18"
+    },
+    {
+      "path": "outputs/sarima/tuning_results_store.csv",
+      "sha256": "b33a118aa16d8c3122fa52ae6e2d54a542681518eb3dc6262de100f1fd64f8c1",
+      "bytes": 3139,
+      "modified": "2026-10-16 22:27:57"
+    },
+    {
+      "path": "outputs/sarima/tuning_results_total.csv",
+      "sha256": "91b4e1ffb259d5659623c1f4faa0cc8946bb658185c2aba8baa6f3855aa4643a",
+      "bytes": 3315,
+      "modified": "2026-10-16 22:24:58"
+    },
+    {
+      "path": "outputs/xgboost/best_params_mobile.json",
+      "sha256": "fd812e369fb5c85543447958156e40946b57f2356ec05dc45905ecea9ae413b0",
+      "bytes": 292,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/best_params_online.json",
+      "sha256": "fd812e369fb5c85543447958156e40946b57f2356ec05dc45905ecea9ae413b0",
+      "bytes": 292,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/best_params_store.json",
+      "sha256": "fd812e369fb5c85543447958156e40946b57f2356ec05dc45905ecea9ae413b0",
+      "bytes": 292,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/best_params_total.json",
+      "sha256": "fd812e369fb5c85543447958156e40946b57f2356ec05dc45905ecea9ae413b0",
+      "bytes": 292,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/comparison_sarima_mobile.csv",
+      "sha256": "c99ee0d68b5c71ebd6121d773001d44256e41813d842d0b831cceeb45e8b03d6",
+      "bytes": 7950,
+      "modified": "2026-10-15 21:06:59"
+    },
+    {
+      "path": "outputs/xgboost/comparison_sarima_online.csv",
+      "sha256": "74ad2e6149960a8df2782e8154bbc70d0e329a24d4a9538ba9430f3fb3f95d1f",
+      "bytes": 7920,
+      "modified": "2026-10-15 21:08:21"
+    },
+    {
+      "path": "outputs/xgboost/comparison_sarima_store.csv",
+      "sha256": "3705f308cf9b917b35a6056ceca282f1462391f400857c1cbcbfb0ad61fadb8a",
+      "bytes": 7938,
+      "modified": "2026-10-15 21:08:21"
+    },
+    {
+      "path": "outputs/xgboost/comparison_sarima_total.csv",
+      "sha256": "d89d419d7d7d362727f65bc972a33843e99150f54690284385b77480e71c230b",
+      "bytes": 7814,
+      "modified": "2026-10-15 21:08:21"
+    },
+    {
+      "path": "outputs/xgboost/feature_importance_mobile.csv",
+      "sha256": "3a135e0276a1649112fc37e6473298337031963c1e3f843ccfd3f2c35317695a",
+      "bytes": 3102,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/feature_importance_online.csv",
+      "sha256": "d976f32040b9c76db9136cf763279ebab8c3433cff9eecd95b89841bdf3a85a1",
+      "bytes": 3073,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/feature_importance_store.csv",
+      "sha256": "9c06f216fb6eacffbdcc38259568d14af23a21b5a7b406235c5e3079589adedb",
+      "bytes": 3161,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/feature_importance_total.csv",
+      "sha256": "3a47f5b01db02a2fe2250145525e74705dca913c56aad61e696ea74483363506",
+      "bytes": 3161,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/forecast_test2025_mobile.csv",
+      "sha256": "a4d1e5010d5648de1d8f5535c10a99eedd2a39ed7cfdbb2769453e9b9712cb13",
+      "bytes": 3547,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/forecast_test2025_online.csv",
+      "sha256": "897a310e0be0df82c050bcf5e26dd72a91761235c266df1180f680d6078d7313",
+      "bytes": 3541,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/forecast_test2025_store.csv",
+      "sha256": "88b85caaa35f5df32e19cd356280ae3414767ff3f6ea4e3b51678be72b2e0f69",
+      "bytes": 3554,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/forecast_test2025_total.csv",
+      "sha256": "418ce4b9fe62e44d3fe111d4f743a3958820baef9b089e16bc3f9d2a7a04f2bc",
+      "bytes": 3486,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2023_mobile.csv",
+      "sha256": "5be8a82d7ed9fae9901b342fef7bcffdb2b83d813a856db3af3387a822d39093",
+      "bytes": 3526,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2023_online.csv",
+      "sha256": "8d230ae45f449cf7f9f624b9e2b94170138e15c838e9d257ebf57d2df8d04dcf",
+      "bytes": 3519,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2023_store.csv",
+      "sha256": "23b641d16625c14b7ddbc0ce21c00a0d948b6cf598ac96da7b03563a8b22422d",
+      "bytes": 3526,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2023_total.csv",
+      "sha256": "f886f98b9e79d4d7e022c50227fc0a0e89e76997857d1ceef4fecc7c64a97864",
+      "bytes": 3486,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2024_mobile.csv",
+      "sha256": "edea0372b2714c0bc7e583f13233e4350ca3c0df574d0b468a0b25e3c60a7501",
+      "bytes": 3598,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2024_online.csv",
+      "sha256": "63e889dc54cad7e8a69e69845c8d2474c923ad82cfebec9fd6cf4c69c9650d19",
+      "bytes": 3613,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2024_store.csv",
+      "sha256": "2bcbec48f96e683cca1d33b7d03f9959b964a71fa0bdc0e051a7498c81a06664",
+      "bytes": 3610,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/forecast_val2024_total.csv",
+      "sha256": "d6610c96a7553197025496fa4cc5be826cafcc6eab04f745bb69e9b4dc7bfd1d",
+      "bytes": 3559,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/plots/feature_importance_gain_mobile.png",
+      "sha256": "e8cfcd40f253252c520dee77e540f915d15ffd7b4963371df349a37c1de18873",
+      "bytes": 54098,
+      "modified": "2026-10-16 22:39:45"
+    },
+    {
+      "path": "outputs/xgboost/plots/feature_importance_gain_online.png",
+      "sha256": "09e8f1dafd30788c3a66997042a7c4a441e6452cafec752c343d02d8f94b966e",
+      "bytes": 53379,
+      "modified": "2026-10-16 22:34:35"
+    },
+    {
+      "path": "outputs/xgboost/plots/feature_importance_gain_store.png",
+      "sha256": "0e3887baa2acf9ed46357f1cd390963c0bdab4f6d0df0b90a91472021d2fea2e",
+      "bytes": 54330,
+      "modified": "2026-10-16 22:37:12"
+    },
+    {
+      "path": "outputs/xgboost/plots/feature_importance_gain_total.png",
+      "sha256": "64cc57096bd0be9082df5ebe0e427ed619c83748f3573be849ec581960f0a688",
+      "bytes": 53202,
+      "modified": "2026-10-16 22:32:02"
+    },
+    {
+      "path": "outputs/xgboost/plots/forecast_val_mobile.png",
+      "sha256": "e559a6894ce3c438e1b1fbe210693d21317dddf574d6886fca1b5a541ba51a1e",
+      "bytes": 133375,
+      "modified": "2026-10-16 22:39:45"
+    },
+    {
+      "path": "outputs/xgboost/plots/forecast_val_online.png",
+      "sha256": "aba77c667db61cd72116581d6824c76885f078c039ff6461338548625709be27",
+      "bytes": 126955,
+      "modified": "2026-10-16 22:34:35"
+    },
+    {
+      "path": "outputs/xgboost/plots/forecast_val_store.png",
+      "sha256": "164de5ed00ab03794fd626ae201a6ae74d1d074be6fbd8e4b503ffdc28404332",
+      "bytes": 140679,
+      "modified": "2026-10-16 22:37:12"
+    },
+    {
+      "path": "outputs/xgboost/plots/forecast_val_total.png",
+      "sha256": "c33e93f92722bc70df94ce015cd01a970dcabb1eac6e169ffef81d96bfceef28",
+      "bytes": 140570,
+      "modified": "2026-10-16 22:32:01"
+    },
+    {
+      "path": "outputs/xgboost/top_errors_mobile.csv",
+      "sha256": "dd427e9421dcea9a6af26272c04f641e7dc7be70ac93d7a2c55c7bb4ea1b75f4",
+      "bytes": 3103,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/top_errors_online.csv",
+      "sha256": "31bb2f93d084742c5fd24da20bc8220258ca17c84b6466777ecf384ea7c3759f",
+      "bytes": 3109,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/top_errors_store.csv",
+      "sha256": "0a0e4dd31e9302178dbd0caacee220dae2a86ad6f9810b00dc2320dba94c7709",
+      "bytes": 3112,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/top_errors_total.csv",
+      "sha256": "11d89366828174bcb96c58f96e8498c37b14721eb33ffce89c61547684478135",
+      "bytes": 3111,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/tuning_results_mobile.csv",
+      "sha256": "df0dfdc2f01811cde10a9789d05f562d248fbff2624fdab46d69e6b6d56f9e74",
+      "bytes": 5072,
+      "modified": "2026-10-16 22:39:44"
+    },
+    {
+      "path": "outputs/xgboost/tuning_results_online.csv",
+      "sha256": "866daa071ff893392d5548342648ae51e7e7fccb601e85a11fe7dba1e6425fbf",
+      "bytes": 5064,
+      "modified": "2026-10-16 22:34:34"
+    },
+    {
+      "path": "outputs/xgboost/tuning_results_store.csv",
+      "sha256": "535f362d6f7184b258fbf71971eb7fd606b5e8970ba22caebe40516c35f74788",
+      "bytes": 5074,
+      "modified": "2026-10-16 22:37:11"
+    },
+    {
+      "path": "outputs/xgboost/tuning_results_total.csv",
+      "sha256": "98d24f093d582acecde01ce8e26f4582f8bed3c662fca8dcfebaef5f98304412",
+      "bytes": 5071,
+      "modified": "2026-10-16 22:32:00"
+    },
+    {
+      "path": "outputs/xgboost/xgb_summary_all_series.csv",
+      "sha256": "ceda97cd13a78321bd3c27aa3ed31d6faa1a0e7cab1fb7b81688212b14792416",
+      "bytes": 1308,
+      "modified": "2026-10-16 22:39:45"
+    }
+  ]
+}

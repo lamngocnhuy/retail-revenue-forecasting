@@ -1,0 +1,15 @@
+data/
+notebooks/data/
+notebooks/eda_outputs/
+
+__pycache__/
+src/__pycache__/
+.pytest_cache/
+
+HuongDan.ipynb
+Overview.ipynb
+ch.mmd
+
+INDE.HTML
+report.md
+baocaotiendo_trackb.md

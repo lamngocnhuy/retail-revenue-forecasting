@@ -1,0 +1,9 @@
+series,period,n_top_rows,is_covid_period,is_covid_shock,is_eda_iqr_outlier,is_black_friday_week,is_cyber_monday_week,is_christmas_week,n_unexplained
+mobile,val2023,10,0,0,0,1,0,0,9
+mobile,val2024,10,0,0,0,0,0,0,9
+online,val2023,10,0,0,2,0,1,0,6
+online,val2024,10,0,0,0,0,0,0,8
+store,val2023,10,0,0,1,0,1,0,6
+store,val2024,10,0,0,0,0,0,0,10
+total,val2023,10,0,0,0,1,0,0,8
+total,val2024,10,0,0,0,0,0,0,10

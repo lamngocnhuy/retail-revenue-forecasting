@@ -1,0 +1,13 @@
+series,period,week_start_match,actual_match,n_rows
+total,val2023,True,True,52
+total,val2024,True,True,53
+total,test2025,True,True,52
+online,val2023,True,True,52
+online,val2024,True,True,53
+online,test2025,True,True,52
+store,val2023,True,True,52
+store,val2024,True,True,53
+store,test2025,True,True,52
+mobile,val2023,True,True,52
+mobile,val2024,True,True,53
+mobile,test2025,True,True,52
